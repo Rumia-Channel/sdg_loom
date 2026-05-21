@@ -1,5 +1,5 @@
-# Mathematical Worked-Solution Dataset Generator
-# 数式はLaTeX文法で記述。問題生成→段階的な解答解説→出力整形のパイプライン。
+# Human-Like Mathematical Problem Solving Dataset Generator
+# 数式はLaTeX文法で記述。問題生成→人間らしい解答ログ→出力整形のパイプライン。
 #
 # 実行例:
 #   sdg run --yaml examples/cot_math_generator.yaml --input examples/data/cot_math_seeds.jsonl --output cot_result.jsonl
@@ -8,14 +8,14 @@
 mabel:
   version: "2.0"
   id: "com.example.cot_math_generator"
-  name: "Mathematical Worked-Solution Dataset Generator"
+  name: "Human-Like Mathematical Problem Solving Dataset Generator"
   description: |
     数学トピックを与えると、LaTeX数式を含む問題文と、
-    段階的な解答解説、最終回答を生成する。
+    人間が問題を解くような自然な解答ログ、最終回答を生成する。
 
 globals:
   const:
-    APP_NAME: "Worked-Solution Math Generator v1"
+    APP_NAME: "Human-Like Math Solver Dataset Generator v1"
   vars:
     problem: ""
     cot_solution: ""
@@ -126,18 +126,19 @@ blocks:
         problem_topic: ProblemTopic
 
   # ============================================================
-  # Step 3: Worked solution generation
+  # Step 3: Human-like solving trace generation
   # ============================================================
   - type: ai
     exec: 20
     id: generate_solution
-    name: "Step 2: Generate Worked Solution"
+    name: "Step 2: Generate Human-Like Solving Trace"
     model: math_solver
     system_prompt: |
-      You are a mathematics professor who writes clear worked solutions for students.
+      You write natural problem-solving traces that resemble a human learner working through math.
 
       # Task
-      Solve the given math problem with a concise, step-by-step worked solution.
+      Solve the given math problem with a mathematically correct, human-like solving trace.
+      The trace should not sound like a polished AI assistant answer.
 
       # LaTeX Requirements
       Format all mathematical expressions in LaTeX. Examples of correct formatting:
@@ -170,31 +171,47 @@ blocks:
       - Align: \begin{aligned} ... \end{aligned}
       - Boxed answer: \boxed{...} for the final answer
 
-      # Reasoning Requirements
+      # Human-Like Solving Requirements
       1. Break the solution into clearly NUMBERED steps (Step 1, Step 2, ...)
       2. For each step:
-         a. State what you are computing/analyzing in PLAIN TEXT
+         a. State what you are noticing, trying, or checking in PLAIN TEXT
          b. Show the mathematical work using PROPER LaTeX
-         c. Explain the reasoning or justification (why this step, what theorem/rule)
+         c. Explain the reasoning or justification when it matters
       3. Show the intermediate calculations needed to verify the answer
       4. Define any new variables or notation you introduce
       5. If using a theorem (e.g., quadratic formula, L'Hopital's rule, integration by parts),
          state it explicitly
-      6. Avoid irrelevant commentary and keep the solution focused
+      6. Use occasional filler or uncertainty when appropriate, such as:
+         "hmm", "let me check", "at first glance", "wait", "actually", "so this seems to..."
+      7. If you express uncertainty, resolve it by checking the algebra or the condition.
+      8. Keep the final answer unambiguous.
+
+      # Style by difficulty
+      - easy:
+        Solve directly. Use little or no filler.
+      - medium:
+        Include 1-3 natural checks or small hesitations.
+      - hard:
+        Include strategy selection, a small false start or reconsideration if useful, and a verification step.
+
+      # Avoid
+      - Do not mention being an AI assistant.
+      - Do not produce a sterile textbook proof unless the problem genuinely requires proof style.
+      - Do not leave "probably", "maybe", or "seems" in the final answer.
 
       # Output Format (MUST follow exactly)
       <cot>
-      Step 1: [Brief description of what this step does]
+      Step 1: [Brief description, with a natural starting thought if appropriate]
 
       $$ equation or working $$
 
-      Explanation: [1-3 sentences explaining the reasoning]
+      Check: [short confirmation, correction, or justification]
 
-      Step 2: [Brief description]
+      Step 2: [Next move, possibly with a small hesitation or self-correction]
 
       $ intermediate calculation $
 
-      Explanation: [1-3 sentences]
+      Check: [short confirmation or verification]
 
       ... (continue all steps)
 
@@ -204,11 +221,11 @@ blocks:
       [The final answer in concise form. Use LaTeX if mathematical.]
       </answer>
       <step_count>
-      [Integer: number of reasoning steps used]
+      [Integer: number of solving steps used]
       </step_count>
     prompts:
       - |
-        Solve the following math problem with a clear, step-by-step worked solution.
+        Solve the following math problem as a human-like problem-solving trace.
 
         ═══════════════════════════════════════
         PROBLEM:
@@ -219,6 +236,8 @@ blocks:
         - Use LaTeX ($...$ or $$...$$) for ALL mathematical expressions
         - Break the solution into clear numbered steps
         - Show the intermediate calculations needed to verify the result
+        - Easy problems should be direct; medium/hard problems may include natural hesitation, checking, or correction
+        - Resolve any uncertainty before the final answer
         - End with $$\boxed{final answer}$$
     outputs:
       - name: CoTSolution
@@ -288,7 +307,7 @@ blocks:
           if not latex_rich:
               warnings.append("基本的なLaTeXコマンド (\frac, \sum, \int等) が見つかりません")
           if len(cot_solution) < 100:
-              warnings.append("推論過程が短すぎます (100文字未満)")
+              warnings.append("Solving trace is too short (under 100 characters)")
           if "$$\\boxed" not in cot_solution and "\\boxed" not in cot_solution:
               warnings.append("最終回答に \\boxed{} がありません")
 
@@ -319,7 +338,7 @@ blocks:
 
           ctx.log(
               "info",
-              f"CoT result: {len(cot_solution)} chars, "
+              f"Solving trace: {len(cot_solution)} chars, "
               f"latex_ok={has_latex and latex_rich}, "
               f"steps={steps}, "
               f"commands={len(found_commands)}, "
