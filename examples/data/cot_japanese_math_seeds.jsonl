@@ -1,55 +1,55 @@
-{"level":"1","grade":"小学校1年","new_concept":"一桁の足し算・引き算、数の大小比較","prerequisites":"なし（数学の出発点）","topic":"一桁の足し算","scenario":"はじめに赤い積み木が4個あり、あとから青い積み木を3個加える。積み木の合計を求める。"}
-{"level":"1","grade":"小学校1年","new_concept":"一桁の足し算・引き算、数の大小比較","prerequisites":"なし（数学の出発点）","topic":"一桁の引き算","scenario":"9本の色鉛筆のうち5本を友だちに渡す。手元に残る色鉛筆の本数を求める。"}
-{"level":"1","grade":"小学校1年","new_concept":"一桁の足し算・引き算、数の大小比較","prerequisites":"なし（数学の出発点）","topic":"数の大小比較","scenario":"赤い花が6本、白い花が8本ある。どちらの花が何本多いかを比べる。"}
-{"level":"2","grade":"小学校2年","new_concept":"二桁の加減、繰り上がり・繰り下がり","prerequisites":"Level 1: 一桁の加減、数の概念","topic":"二桁の足し算","scenario":"図書室に本が47冊あり、新しく28冊追加された。合計冊数を求める。"}
-{"level":"2","grade":"小学校2年","new_concept":"二桁の加減、繰り上がり・繰り下がり","prerequisites":"Level 1: 一桁の加減、数の概念","topic":"二桁の引き算","scenario":"63枚の折り紙から28枚を使った。残りの枚数を求める。"}
-{"level":"2","grade":"小学校2年","new_concept":"二桁の加減、繰り上がり・繰り下がり","prerequisites":"Level 1: 一桁の加減、数の概念","topic":"加減混合の文章題","scenario":"カードを58枚持っている。17枚もらい、その後26枚使ったとき、最後に残る枚数を求める。"}
-{"level":"2","grade":"小学校2年","new_concept":"二桁の加減、繰り上がり・繰り下がり","prerequisites":"Level 1: 一桁の加減、数の概念","topic":"計算結果の大小比較","scenario":"A組は34点に19点を加え、B組は71点から16点を引く。それぞれの点数を計算し、どちらが大きいかを比べる。"}
-{"level":"3","grade":"小学校2〜3年","new_concept":"九九と乗法の意味","prerequisites":"Level 1-2: 加減算全般","topic":"九九（掛け算）","scenario":"1袋に6個ずつ入ったミニトマトが4袋ある。ミニトマトの総数を求める。"}
-{"level":"3","grade":"小学校2〜3年","new_concept":"九九と乗法の意味","prerequisites":"Level 1-2: 加減算全般","topic":"乗法の文章題","scenario":"机を1列に7台ずつ、5列に並べる。机の総数を求める。"}
-{"level":"3","grade":"小学校2〜3年","new_concept":"九九と乗法の意味","prerequisites":"Level 1-2: 加減算全般","topic":"乗法と加法の複合","scenario":"1本80円の鉛筆を3本、1冊120円のノートを2冊買う。代金の合計を求める。"}
-{"level":"3","grade":"小学校2〜3年","new_concept":"九九と乗法の意味","prerequisites":"Level 1-2: 加減算全般","topic":"長方形配列と乗法","scenario":"たて8枚、横5枚に正方形のタイルを隙間なく並べる。タイルの総数を求める。"}
-{"level":"4","grade":"小学校3年","new_concept":"割り算（等分除・包含除）、余り","prerequisites":"Level 1-3: 加減乗全般","topic":"等分除","scenario":"35個のあめを7人に同じ数ずつ分ける。1人あたりの個数を求める。"}
-{"level":"4","grade":"小学校3年","new_concept":"割り算（等分除・包含除）、余り","prerequisites":"Level 1-3: 加減乗全般","topic":"包含除","scenario":"42人の生徒を1チーム6人ずつに分ける。作れるチーム数を求める。"}
-{"level":"4","grade":"小学校3年","new_concept":"割り算（等分除・包含除）、余り","prerequisites":"Level 1-3: 加減乗全般","topic":"余りのある割り算","scenario":"50枚の色紙を8人に同じ数ずつ分ける。1人あたりの枚数と余りを求める。"}
-{"level":"4","grade":"小学校3年","new_concept":"割り算（等分除・包含除）、余り","prerequisites":"Level 1-3: 加減乗全般","topic":"割り算と切り上げ","scenario":"237ページの本を1日に9ページずつ読む。読み終えるのに必要な日数を求める。"}
-{"level":"5","grade":"小学校4〜5年","new_concept":"小数の四則演算、位取り","prerequisites":"Level 1-4: 整数四則","topic":"小数の足し算","scenario":"1.5Lのジュースと0.8Lのジュースを合わせる。合計の量をLで求める。"}
-{"level":"5","grade":"小学校4〜5年","new_concept":"小数の四則演算、位取り","prerequisites":"Level 1-4: 整数四則","topic":"小数の掛け算","scenario":"1mあたり3.2gの針金がある。この針金2.5mの重さを求める。"}
-{"level":"5","grade":"小学校4〜5年","new_concept":"小数の四則演算、位取り","prerequisites":"Level 1-4: 整数四則","topic":"小数の割り算","scenario":"7.2mのリボンを1.8mずつに切る。取れる本数を求める。"}
-{"level":"5","grade":"小学校4〜5年","new_concept":"小数の四則演算、位取り","prerequisites":"Level 1-4: 整数四則","topic":"小数の混合演算","scenario":"2.5kgのすいかを3個買い、全体から0.8kg分の皮を取り除く。食べられる部分の重さを求める。"}
-{"level":"6","grade":"小学校5〜6年","new_concept":"分数の四則演算、通分・約分","prerequisites":"Level 1-5: 整数・小数四則","topic":"分数の足し算","scenario":"2/5Lの牛乳と1/4Lの牛乳を合わせる。合計量を分数で求める。"}
-{"level":"6","grade":"小学校5〜6年","new_concept":"分数の四則演算、通分・約分","prerequisites":"Level 1-5: 整数・小数四則","topic":"分数の掛け算","scenario":"長さ3/4mのテープを、その2/3の長さだけ使う。使った長さを求める。"}
-{"level":"6","grade":"小学校5〜6年","new_concept":"分数の四則演算、通分・約分","prerequisites":"Level 1-5: 整数・小数四則","topic":"分数の割り算","scenario":"5/6mのひもから1/4mずつ切り取る。何本取れるかを求める。"}
-{"level":"6","grade":"小学校5〜6年","new_concept":"分数の四則演算、通分・約分","prerequisites":"Level 1-5: 整数・小数四則","topic":"分数と小数の混合","scenario":"1時間のうち1/3時間を国語に、0.4時間を算数に使う。残り時間を求める。"}
-{"level":"7","grade":"中学校1年","new_concept":"文字式、一次方程式、正負の数","prerequisites":"Level 1-6: 全四則演算","topic":"一次方程式","scenario":"ある数を3倍して5を足すと20になる。その数を一次方程式で求める。"}
-{"level":"7","grade":"中学校1年","new_concept":"文字式、一次方程式、正負の数","prerequisites":"Level 1-6: 全四則演算","topic":"正負の数","scenario":"朝の気温は-3度で、昼までに8度上がった。昼の気温を求める。"}
-{"level":"7","grade":"中学校1年","new_concept":"文字式、一次方程式、正負の数","prerequisites":"Level 1-6: 全四則演算","topic":"一次方程式の文章題","scenario":"1個150円のりんごを何個かと、1個80円のみかんを5個買い、1000円を出して170円のおつりを受け取った。りんごの個数を求める。"}
-{"level":"7","grade":"中学校1年","new_concept":"文字式、一次方程式、正負の数","prerequisites":"Level 1-6: 全四則演算","topic":"比例式","scenario":"比例式 2:5 = 8:x を満たす x の値を求める。"}
-{"level":"8","grade":"中学校2年","new_concept":"連立方程式、不等式","prerequisites":"Level 1-7: 一次方程式まで","topic":"連立方程式","scenario":"りんご1個とみかん1個の合計は250円、りんご2個とみかん3個の合計は650円である。それぞれ1個の値段を求める。"}
-{"level":"8","grade":"中学校2年","new_concept":"連立方程式、不等式","prerequisites":"Level 1-7: 一次方程式まで","topic":"不等式","scenario":"1個120円のプリンと1個80円のゼリーを合わせて15個買い、代金を1500円以下にしたい。プリンを最大何個買えるか求める。"}
-{"level":"8","grade":"中学校2年","new_concept":"連立方程式、不等式","prerequisites":"Level 1-7: 一次方程式まで","topic":"連立方程式（割合）","scenario":"あるクラスでは男子の30%と女子の20%が眼鏡をかけている。眼鏡をかけている生徒は9人、クラス全体は35人である。男子と女子の人数を求める。"}
-{"level":"8","grade":"中学校2年","new_concept":"連立方程式、不等式","prerequisites":"Level 1-7: 一次方程式まで","topic":"不等式の文章題","scenario":"すでに20km走った人が、残りの日数で1日3kmずつ走る。合計75km以上にするには、あと何日以上走ればよいか求める。"}
-{"level":"9","grade":"中学校3年","new_concept":"二次方程式、因数分解、平方根","prerequisites":"Level 1-8: 連立方程式・不等式まで","topic":"二次方程式","scenario":"長方形の縦は横より3cm長く、面積は54cm^2である。横の長さを求める。"}
-{"level":"9","grade":"中学校3年","new_concept":"二次方程式、因数分解、平方根","prerequisites":"Level 1-8: 連立方程式・不等式まで","topic":"因数分解","scenario":"多項式 x^2 + 5x + 6 を因数分解する。"}
-{"level":"9","grade":"中学校3年","new_concept":"二次方程式、因数分解、平方根","prerequisites":"Level 1-8: 連立方程式・不等式まで","topic":"平方根","scenario":"面積が72cm^2の正方形について、一辺の長さを sqrt(2)=1.414 として小数第1位まで求める。"}
-{"level":"9","grade":"中学校3年","new_concept":"二次方程式、因数分解、平方根","prerequisites":"Level 1-8: 連立方程式・不等式まで","topic":"解の公式","scenario":"二次方程式 2x^2 - 3x - 5 = 0 を解く。"}
-{"level":"10","grade":"高等学校1年","new_concept":"関数、三角比","prerequisites":"Level 1-9: 二次方程式・因数分解まで","topic":"二次関数の頂点","scenario":"二次関数 y = 2x^2 - 8x + 5 の頂点座標を求める。"}
-{"level":"10","grade":"高等学校1年","new_concept":"関数、三角比","prerequisites":"Level 1-9: 二次方程式・因数分解まで","topic":"三角比","scenario":"水平な地面で、建物から20m離れた地点から屋上を見上げると、高さは15mである。このとき仰角の tan の値を求める。"}
-{"level":"10","grade":"高等学校1年","new_concept":"関数、三角比","prerequisites":"Level 1-9: 二次方程式・因数分解まで","topic":"二次関数とx軸の交点","scenario":"二次関数 y = x^2 - 3x - 4 と x軸との交点を求める。"}
-{"level":"10","grade":"高等学校1年","new_concept":"関数、三角比","prerequisites":"Level 1-9: 二次方程式・因数分解まで","topic":"二次関数の最大最小","scenario":"価格100円の商品について、値上げ額をx円とすると販売個数が100-2x個になる。売上金額を最大にするxを求める。"}
-{"level":"11","grade":"高等学校2年","new_concept":"極限、微分、導関数、接線、極値","prerequisites":"Level 1-10: 関数全般まで","topic":"微分係数と接線","scenario":"関数 f(x)=x^2+3x について、x=1 における接線の方程式を求める。"}
-{"level":"11","grade":"高等学校2年","new_concept":"極限、微分、導関数、接線、極値","prerequisites":"Level 1-10: 関数全般まで","topic":"極値","scenario":"関数 f(x)=x^3-6x^2+9x+1 の極値を求める。"}
-{"level":"11","grade":"高等学校2年","new_concept":"極限、微分、導関数、接線、極値","prerequisites":"Level 1-10: 関数全般まで","topic":"極限","scenario":"極限 lim(x->2) (x^2-4)/(x-2) を求める。"}
-{"level":"11","grade":"高等学校2年","new_concept":"極限、微分、導関数、接線、極値","prerequisites":"Level 1-10: 関数全般まで","topic":"微分の応用（最適化）","scenario":"底面が正方形で体積が500cm^3の直方体の箱を作る。表面積を最小にする底面の一辺の長さを求める。"}
-{"level":"12","grade":"高等学校3年","new_concept":"不定積分・定積分、面積、体積","prerequisites":"Level 1-11: 微分まで","topic":"不定積分","scenario":"関数 f(x)=3x^2-4x+1 の不定積分を求める。"}
-{"level":"12","grade":"高等学校3年","new_concept":"不定積分・定積分、面積、体積","prerequisites":"Level 1-11: 微分まで","topic":"定積分と面積","scenario":"曲線 y=x^2 と直線 y=x+2 で囲まれた領域の面積を求める。"}
-{"level":"12","grade":"高等学校3年","new_concept":"不定積分・定積分、面積、体積","prerequisites":"Level 1-11: 微分まで","topic":"定積分と体積","scenario":"曲線 y=sqrt(x) をx軸の周りに回転してできる立体について、x=0 から x=4 までの体積を求める。"}
-{"level":"12","grade":"高等学校3年","new_concept":"不定積分・定積分、面積、体積","prerequisites":"Level 1-11: 微分まで","topic":"積分の応用（速度と距離）","scenario":"物体の速度が v(t)=2t+3 (m/s) で与えられる。t=0 から t=5 秒までの移動距離を求める。"}
-{"level":"13","grade":"大学教養課程","new_concept":"行列・行列式・固有値、偏微分、重積分","prerequisites":"Level 1-12: 微積分の基礎まで","topic":"行列式と逆行列","scenario":"2x2行列 A=[[2,1],[3,4]] について、行列式と逆行列を求める。"}
-{"level":"13","grade":"大学教養課程","new_concept":"行列・行列式・固有値、偏微分、重積分","prerequisites":"Level 1-12: 微積分の基礎まで","topic":"固有値と固有ベクトル","scenario":"2x2行列 A=[[3,1],[2,4]] の固有値と、それぞれに対応する固有ベクトルを求める。"}
-{"level":"13","grade":"大学教養課程","new_concept":"行列・行列式・固有値、偏微分、重積分","prerequisites":"Level 1-12: 微積分の基礎まで","topic":"偏微分","scenario":"関数 f(x,y)=2x^3*y+x*y^2-3x+y について、x と y に関する偏導関数を求める。"}
-{"level":"13","grade":"大学教養課程","new_concept":"行列・行列式・固有値、偏微分、重積分","prerequisites":"Level 1-12: 微積分の基礎まで","topic":"重積分","scenario":"領域 D: 0<=x<=2, 0<=y<=x における関数 x+y の重積分を求める。"}
-{"level":"14","grade":"大学専門課程","new_concept":"群論、複素解析、位相幾何学","prerequisites":"Level 1-13: 大学教養数学まで","topic":"群論","scenario":"巡回群 Z/12Z において、6で生成される部分群の元をすべて求め、その位数を答える。"}
-{"level":"14","grade":"大学専門課程","new_concept":"群論、複素解析、位相幾何学","prerequisites":"Level 1-13: 大学教養数学まで","topic":"複素解析（留数定理）","scenario":"関数 f(z)=1/(z-1) を円 |z|=3 に沿って反時計回りに一周積分する。積分値を求める。"}
-{"level":"14","grade":"大学専門課程","new_concept":"群論、複素解析、位相幾何学","prerequisites":"Level 1-13: 大学教養数学まで","topic":"位相（コンパクト性）","scenario":"実数空間の部分集合 A={1/n | nは自然数} ∪ {0} がコンパクトであることを示す。"}
-{"level":"14","grade":"大学専門課程","new_concept":"群論、複素解析、位相幾何学","prerequisites":"Level 1-13: 大学教養数学まで","topic":"関数解析","scenario":"L^2[0,1] において、関数列 f_n(x)=x^n が 0 に収束することを L^2 ノルムで示す。"}
+{"level":"1","grade":"小学校1年","new_concept":"一桁の足し算・引き算、数の大小比較","prerequisites":"なし（数学の出発点）","topic":"一桁の足し算","scenario":"はじめに赤い積み木が4個あり、あとから青い積み木を3個加える。積み木の合計を求める。","style_intensity":2}
+{"level":"1","grade":"小学校1年","new_concept":"一桁の足し算・引き算、数の大小比較","prerequisites":"なし（数学の出発点）","topic":"一桁の引き算","scenario":"9本の色鉛筆のうち5本を友だちに渡す。手元に残る色鉛筆の本数を求める。","style_intensity":2}
+{"level":"1","grade":"小学校1年","new_concept":"一桁の足し算・引き算、数の大小比較","prerequisites":"なし（数学の出発点）","topic":"数の大小比較","scenario":"赤い花が6本、白い花が8本ある。どちらの花が何本多いかを比べる。","style_intensity":2}
+{"level":"2","grade":"小学校2年","new_concept":"二桁の加減、繰り上がり・繰り下がり","prerequisites":"Level 1: 一桁の加減、数の概念","topic":"二桁の足し算","scenario":"図書室に本が47冊あり、新しく28冊追加された。合計冊数を求める。","style_intensity":2}
+{"level":"2","grade":"小学校2年","new_concept":"二桁の加減、繰り上がり・繰り下がり","prerequisites":"Level 1: 一桁の加減、数の概念","topic":"二桁の引き算","scenario":"63枚の折り紙から28枚を使った。残りの枚数を求める。","style_intensity":2}
+{"level":"2","grade":"小学校2年","new_concept":"二桁の加減、繰り上がり・繰り下がり","prerequisites":"Level 1: 一桁の加減、数の概念","topic":"加減混合の文章題","scenario":"カードを58枚持っている。17枚もらい、その後26枚使ったとき、最後に残る枚数を求める。","style_intensity":2}
+{"level":"2","grade":"小学校2年","new_concept":"二桁の加減、繰り上がり・繰り下がり","prerequisites":"Level 1: 一桁の加減、数の概念","topic":"計算結果の大小比較","scenario":"A組は34点に19点を加え、B組は71点から16点を引く。それぞれの点数を計算し、どちらが大きいかを比べる。","style_intensity":2}
+{"level":"3","grade":"小学校2〜3年","new_concept":"九九と乗法の意味","prerequisites":"Level 1-2: 加減算全般","topic":"九九（掛け算）","scenario":"1袋に6個ずつ入ったミニトマトが4袋ある。ミニトマトの総数を求める。","style_intensity":2}
+{"level":"3","grade":"小学校2〜3年","new_concept":"九九と乗法の意味","prerequisites":"Level 1-2: 加減算全般","topic":"乗法の文章題","scenario":"机を1列に7台ずつ、5列に並べる。机の総数を求める。","style_intensity":2}
+{"level":"3","grade":"小学校2〜3年","new_concept":"九九と乗法の意味","prerequisites":"Level 1-2: 加減算全般","topic":"乗法と加法の複合","scenario":"1本80円の鉛筆を3本、1冊120円のノートを2冊買う。代金の合計を求める。","style_intensity":2}
+{"level":"3","grade":"小学校2〜3年","new_concept":"九九と乗法の意味","prerequisites":"Level 1-2: 加減算全般","topic":"長方形配列と乗法","scenario":"たて8枚、横5枚に正方形のタイルを隙間なく並べる。タイルの総数を求める。","style_intensity":2}
+{"level":"4","grade":"小学校3年","new_concept":"割り算（等分除・包含除）、余り","prerequisites":"Level 1-3: 加減乗全般","topic":"等分除","scenario":"35個のあめを7人に同じ数ずつ分ける。1人あたりの個数を求める。","style_intensity":2}
+{"level":"4","grade":"小学校3年","new_concept":"割り算（等分除・包含除）、余り","prerequisites":"Level 1-3: 加減乗全般","topic":"包含除","scenario":"42人の生徒を1チーム6人ずつに分ける。作れるチーム数を求める。","style_intensity":2}
+{"level":"4","grade":"小学校3年","new_concept":"割り算（等分除・包含除）、余り","prerequisites":"Level 1-3: 加減乗全般","topic":"余りのある割り算","scenario":"50枚の色紙を8人に同じ数ずつ分ける。1人あたりの枚数と余りを求める。","style_intensity":2}
+{"level":"4","grade":"小学校3年","new_concept":"割り算（等分除・包含除）、余り","prerequisites":"Level 1-3: 加減乗全般","topic":"割り算と切り上げ","scenario":"237ページの本を1日に9ページずつ読む。読み終えるのに必要な日数を求める。","style_intensity":2}
+{"level":"5","grade":"小学校4〜5年","new_concept":"小数の四則演算、位取り","prerequisites":"Level 1-4: 整数四則","topic":"小数の足し算","scenario":"1.5Lのジュースと0.8Lのジュースを合わせる。合計の量をLで求める。","style_intensity":2}
+{"level":"5","grade":"小学校4〜5年","new_concept":"小数の四則演算、位取り","prerequisites":"Level 1-4: 整数四則","topic":"小数の掛け算","scenario":"1mあたり3.2gの針金がある。この針金2.5mの重さを求める。","style_intensity":2}
+{"level":"5","grade":"小学校4〜5年","new_concept":"小数の四則演算、位取り","prerequisites":"Level 1-4: 整数四則","topic":"小数の割り算","scenario":"7.2mのリボンを1.8mずつに切る。取れる本数を求める。","style_intensity":2}
+{"level":"5","grade":"小学校4〜5年","new_concept":"小数の四則演算、位取り","prerequisites":"Level 1-4: 整数四則","topic":"小数の混合演算","scenario":"2.5kgのすいかを3個買い、全体から0.8kg分の皮を取り除く。食べられる部分の重さを求める。","style_intensity":2}
+{"level":"6","grade":"小学校5〜6年","new_concept":"分数の四則演算、通分・約分","prerequisites":"Level 1-5: 整数・小数四則","topic":"分数の足し算","scenario":"2/5Lの牛乳と1/4Lの牛乳を合わせる。合計量を分数で求める。","style_intensity":2}
+{"level":"6","grade":"小学校5〜6年","new_concept":"分数の四則演算、通分・約分","prerequisites":"Level 1-5: 整数・小数四則","topic":"分数の掛け算","scenario":"長さ3/4mのテープを、その2/3の長さだけ使う。使った長さを求める。","style_intensity":2}
+{"level":"6","grade":"小学校5〜6年","new_concept":"分数の四則演算、通分・約分","prerequisites":"Level 1-5: 整数・小数四則","topic":"分数の割り算","scenario":"5/6mのひもから1/4mずつ切り取る。何本取れるかを求める。","style_intensity":2}
+{"level":"6","grade":"小学校5〜6年","new_concept":"分数の四則演算、通分・約分","prerequisites":"Level 1-5: 整数・小数四則","topic":"分数と小数の混合","scenario":"1時間のうち1/3時間を国語に、0.4時間を算数に使う。残り時間を求める。","style_intensity":2}
+{"level":"7","grade":"中学校1年","new_concept":"文字式、一次方程式、正負の数","prerequisites":"Level 1-6: 全四則演算","topic":"一次方程式","scenario":"ある数を3倍して5を足すと20になる。その数を一次方程式で求める。","style_intensity":2}
+{"level":"7","grade":"中学校1年","new_concept":"文字式、一次方程式、正負の数","prerequisites":"Level 1-6: 全四則演算","topic":"正負の数","scenario":"朝の気温は-3度で、昼までに8度上がった。昼の気温を求める。","style_intensity":2}
+{"level":"7","grade":"中学校1年","new_concept":"文字式、一次方程式、正負の数","prerequisites":"Level 1-6: 全四則演算","topic":"一次方程式の文章題","scenario":"1個150円のりんごを何個かと、1個80円のみかんを5個買い、1000円を出して170円のおつりを受け取った。りんごの個数を求める。","style_intensity":2}
+{"level":"7","grade":"中学校1年","new_concept":"文字式、一次方程式、正負の数","prerequisites":"Level 1-6: 全四則演算","topic":"比例式","scenario":"比例式 2:5 = 8:x を満たす x の値を求める。","style_intensity":2}
+{"level":"8","grade":"中学校2年","new_concept":"連立方程式、不等式","prerequisites":"Level 1-7: 一次方程式まで","topic":"連立方程式","scenario":"りんご1個とみかん1個の合計は250円、りんご2個とみかん3個の合計は650円である。それぞれ1個の値段を求める。","style_intensity":2}
+{"level":"8","grade":"中学校2年","new_concept":"連立方程式、不等式","prerequisites":"Level 1-7: 一次方程式まで","topic":"不等式","scenario":"1個120円のプリンと1個80円のゼリーを合わせて15個買い、代金を1500円以下にしたい。プリンを最大何個買えるか求める。","style_intensity":2}
+{"level":"8","grade":"中学校2年","new_concept":"連立方程式、不等式","prerequisites":"Level 1-7: 一次方程式まで","topic":"連立方程式（割合）","scenario":"あるクラスでは男子の30%と女子の20%が眼鏡をかけている。眼鏡をかけている生徒は9人、クラス全体は35人である。男子と女子の人数を求める。","style_intensity":2}
+{"level":"8","grade":"中学校2年","new_concept":"連立方程式、不等式","prerequisites":"Level 1-7: 一次方程式まで","topic":"不等式の文章題","scenario":"すでに20km走った人が、残りの日数で1日3kmずつ走る。合計75km以上にするには、あと何日以上走ればよいか求める。","style_intensity":2}
+{"level":"9","grade":"中学校3年","new_concept":"二次方程式、因数分解、平方根","prerequisites":"Level 1-8: 連立方程式・不等式まで","topic":"二次方程式","scenario":"長方形の縦は横より3cm長く、面積は54cm^2である。横の長さを求める。","style_intensity":2}
+{"level":"9","grade":"中学校3年","new_concept":"二次方程式、因数分解、平方根","prerequisites":"Level 1-8: 連立方程式・不等式まで","topic":"因数分解","scenario":"多項式 x^2 + 5x + 6 を因数分解する。","style_intensity":2}
+{"level":"9","grade":"中学校3年","new_concept":"二次方程式、因数分解、平方根","prerequisites":"Level 1-8: 連立方程式・不等式まで","topic":"平方根","scenario":"面積が72cm^2の正方形について、一辺の長さを sqrt(2)=1.414 として小数第1位まで求める。","style_intensity":2}
+{"level":"9","grade":"中学校3年","new_concept":"二次方程式、因数分解、平方根","prerequisites":"Level 1-8: 連立方程式・不等式まで","topic":"解の公式","scenario":"二次方程式 2x^2 - 3x - 5 = 0 を解く。","style_intensity":2}
+{"level":"10","grade":"高等学校1年","new_concept":"関数、三角比","prerequisites":"Level 1-9: 二次方程式・因数分解まで","topic":"二次関数の頂点","scenario":"二次関数 y = 2x^2 - 8x + 5 の頂点座標を求める。","style_intensity":2}
+{"level":"10","grade":"高等学校1年","new_concept":"関数、三角比","prerequisites":"Level 1-9: 二次方程式・因数分解まで","topic":"三角比","scenario":"水平な地面で、建物から20m離れた地点から屋上を見上げると、高さは15mである。このとき仰角の tan の値を求める。","style_intensity":2}
+{"level":"10","grade":"高等学校1年","new_concept":"関数、三角比","prerequisites":"Level 1-9: 二次方程式・因数分解まで","topic":"二次関数とx軸の交点","scenario":"二次関数 y = x^2 - 3x - 4 と x軸との交点を求める。","style_intensity":2}
+{"level":"10","grade":"高等学校1年","new_concept":"関数、三角比","prerequisites":"Level 1-9: 二次方程式・因数分解まで","topic":"二次関数の最大最小","scenario":"価格100円の商品について、値上げ額をx円とすると販売個数が100-2x個になる。売上金額を最大にするxを求める。","style_intensity":2}
+{"level":"11","grade":"高等学校2年","new_concept":"極限、微分、導関数、接線、極値","prerequisites":"Level 1-10: 関数全般まで","topic":"微分係数と接線","scenario":"関数 f(x)=x^2+3x について、x=1 における接線の方程式を求める。","style_intensity":2}
+{"level":"11","grade":"高等学校2年","new_concept":"極限、微分、導関数、接線、極値","prerequisites":"Level 1-10: 関数全般まで","topic":"極値","scenario":"関数 f(x)=x^3-6x^2+9x+1 の極値を求める。","style_intensity":2}
+{"level":"11","grade":"高等学校2年","new_concept":"極限、微分、導関数、接線、極値","prerequisites":"Level 1-10: 関数全般まで","topic":"極限","scenario":"極限 lim(x->2) (x^2-4)/(x-2) を求める。","style_intensity":2}
+{"level":"11","grade":"高等学校2年","new_concept":"極限、微分、導関数、接線、極値","prerequisites":"Level 1-10: 関数全般まで","topic":"微分の応用（最適化）","scenario":"底面が正方形で体積が500cm^3の直方体の箱を作る。表面積を最小にする底面の一辺の長さを求める。","style_intensity":2}
+{"level":"12","grade":"高等学校3年","new_concept":"不定積分・定積分、面積、体積","prerequisites":"Level 1-11: 微分まで","topic":"不定積分","scenario":"関数 f(x)=3x^2-4x+1 の不定積分を求める。","style_intensity":2}
+{"level":"12","grade":"高等学校3年","new_concept":"不定積分・定積分、面積、体積","prerequisites":"Level 1-11: 微分まで","topic":"定積分と面積","scenario":"曲線 y=x^2 と直線 y=x+2 で囲まれた領域の面積を求める。","style_intensity":2}
+{"level":"12","grade":"高等学校3年","new_concept":"不定積分・定積分、面積、体積","prerequisites":"Level 1-11: 微分まで","topic":"定積分と体積","scenario":"曲線 y=sqrt(x) をx軸の周りに回転してできる立体について、x=0 から x=4 までの体積を求める。","style_intensity":2}
+{"level":"12","grade":"高等学校3年","new_concept":"不定積分・定積分、面積、体積","prerequisites":"Level 1-11: 微分まで","topic":"積分の応用（速度と距離）","scenario":"物体の速度が v(t)=2t+3 (m/s) で与えられる。t=0 から t=5 秒までの移動距離を求める。","style_intensity":2}
+{"level":"13","grade":"大学教養課程","new_concept":"行列・行列式・固有値、偏微分、重積分","prerequisites":"Level 1-12: 微積分の基礎まで","topic":"行列式と逆行列","scenario":"2x2行列 A=[[2,1],[3,4]] について、行列式と逆行列を求める。","style_intensity":2}
+{"level":"13","grade":"大学教養課程","new_concept":"行列・行列式・固有値、偏微分、重積分","prerequisites":"Level 1-12: 微積分の基礎まで","topic":"固有値と固有ベクトル","scenario":"2x2行列 A=[[3,1],[2,4]] の固有値と、それぞれに対応する固有ベクトルを求める。","style_intensity":2}
+{"level":"13","grade":"大学教養課程","new_concept":"行列・行列式・固有値、偏微分、重積分","prerequisites":"Level 1-12: 微積分の基礎まで","topic":"偏微分","scenario":"関数 f(x,y)=2x^3*y+x*y^2-3x+y について、x と y に関する偏導関数を求める。","style_intensity":2}
+{"level":"13","grade":"大学教養課程","new_concept":"行列・行列式・固有値、偏微分、重積分","prerequisites":"Level 1-12: 微積分の基礎まで","topic":"重積分","scenario":"領域 D: 0<=x<=2, 0<=y<=x における関数 x+y の重積分を求める。","style_intensity":2}
+{"level":"14","grade":"大学専門課程","new_concept":"群論、複素解析、位相幾何学","prerequisites":"Level 1-13: 大学教養数学まで","topic":"群論","scenario":"巡回群 Z/12Z において、6で生成される部分群の元をすべて求め、その位数を答える。","style_intensity":2}
+{"level":"14","grade":"大学専門課程","new_concept":"群論、複素解析、位相幾何学","prerequisites":"Level 1-13: 大学教養数学まで","topic":"複素解析（留数定理）","scenario":"関数 f(z)=1/(z-1) を円 |z|=3 に沿って反時計回りに一周積分する。積分値を求める。","style_intensity":2}
+{"level":"14","grade":"大学専門課程","new_concept":"群論、複素解析、位相幾何学","prerequisites":"Level 1-13: 大学教養数学まで","topic":"位相（コンパクト性）","scenario":"実数空間の部分集合 A={1/n | nは自然数} ∪ {0} がコンパクトであることを示す。","style_intensity":2}
+{"level":"14","grade":"大学専門課程","new_concept":"群論、複素解析、位相幾何学","prerequisites":"Level 1-13: 大学教養数学まで","topic":"関数解析","scenario":"L^2[0,1] において、関数列 f_n(x)=x^n が 0 に収束することを L^2 ノルムで示す。","style_intensity":2}

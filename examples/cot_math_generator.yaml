@@ -41,7 +41,7 @@ models:
 
 blocks:
   # ============================================================
-  # Step 1: 初期化
+  # 初期化
   # ============================================================
   - type: logic
     exec: 1
@@ -55,12 +55,12 @@ blocks:
         from: value
 
   # ============================================================
-  # Step 2: 数学問題の生成
+  # 数学問題の生成
   # ============================================================
   - type: ai
     exec: 10
     id: generate_problem
-    name: "Step 1: Generate Math Problem"
+    name: "Generate Math Problem"
     model: math_solver
     system_prompt: |
       You are a mathematics curriculum writer creating high-quality assessment problems.
@@ -126,12 +126,12 @@ blocks:
         problem_topic: ProblemTopic
 
   # ============================================================
-  # Step 3: Human-like solving trace generation
+  # Human-like solving trace generation
   # ============================================================
   - type: ai
     exec: 20
     id: generate_solution
-    name: "Step 2: Generate Human-Like Solving Trace"
+    name: "Generate Human-Like Solving Trace"
     model: math_solver
     system_prompt: |
       You write natural problem-solving traces that resemble a human learner working through math.
@@ -172,19 +172,21 @@ blocks:
       - Boxed answer: \boxed{...} for the final answer
 
       # Human-Like Solving Requirements
-      1. Break the solution into clearly NUMBERED steps (Step 1, Step 2, ...)
-      2. For each step:
+      1. Do not output meta labels such as "Step 1", "Step 2", "Level", or "difficulty".
+      2. Organize the solution as natural paragraphs using transitions like "First", "Next", "Now", and "Finally".
+      3. For each paragraph:
          a. State what you are noticing, trying, or checking in PLAIN TEXT
          b. Show the mathematical work using PROPER LaTeX
          c. Explain the reasoning or justification when it matters
-      3. Show the intermediate calculations needed to verify the answer
-      4. Define any new variables or notation you introduce
-      5. If using a theorem (e.g., quadratic formula, L'Hopital's rule, integration by parts),
+      4. Show the intermediate calculations needed to verify the answer
+      5. Define any new variables or notation you introduce
+      6. If using a theorem (e.g., quadratic formula, L'Hopital's rule, integration by parts),
          state it explicitly
-      6. Use occasional filler or uncertainty when appropriate, such as:
+      7. Use occasional filler or uncertainty when appropriate, such as:
          "hmm", "let me check", "at first glance", "wait", "actually", "so this seems to..."
-      7. If you express uncertainty, resolve it by checking the algebra or the condition.
-      8. Keep the final answer unambiguous.
+      8. If you express uncertainty, resolve it by checking the algebra or the condition.
+      9. Keep the final answer unambiguous, and keep the short reason that supports it.
+      10. The <answer> field must read like the final response to the question, not like a fragment copied from the trace.
 
       # Style by difficulty
       - easy:
@@ -199,30 +201,31 @@ blocks:
       - Do not produce a sterile textbook proof unless the problem genuinely requires proof style.
       - Do not leave "probably", "maybe", or "seems" in the final answer.
 
+      # Answer Field Requirements
+      The <answer> field is the final response to the question.
+      - Do not output only the bare value.
+      - Do not include filler, hesitation, self-correction, or trace-like inner monologue.
+      - Preserve the same voice as the solving trace; do not suddenly switch into a sterile textbook style.
+      - Tone consistency is as important as concision.
+      - Include the essential calculation, condition check, verification, and units when needed.
+      - For maximum/minimum or integer-condition problems, briefly show that the chosen value works and the adjacent value fails when relevant.
+      - For equations, functions, calculus, or proof-style problems, keep the key transformation or theorem that justifies the conclusion.
+      - Keep it concise, but complete enough that a reader can see why it answers the question correctly without reading the full trace.
+
       # Output Format (MUST follow exactly)
       <cot>
-      Step 1: [Brief description, with a natural starting thought if appropriate]
-
-      $$ equation or working $$
-
-      Check: [short confirmation, correction, or justification]
-
-      Step 2: [Next move, possibly with a small hesitation or self-correction]
-
-      $ intermediate calculation $
-
-      Check: [short confirmation or verification]
-
-      ... (continue all steps)
-
-      **Final Answer:** $$\boxed{answer}$$
+      [Natural problem-solving trace.
+       Do not use "Step", "Level", "difficulty", or numbered stage labels.
+       Use natural transitions, show the necessary LaTeX work, and include checks or verification when useful.
+       End with a boxed final answer and a short reason supporting it.]
       </cot>
       <answer>
-      [The final answer in concise form. Use LaTeX if mathematical.]
+      [Final response to the question.
+       Do not include filler or hesitation.
+       Do not output only the bare value.
+       Preserve the same voice as the solving trace without becoming a trace fragment.
+       Preserve the essential calculation, condition check, verification, and units when needed.]
       </answer>
-      <step_count>
-      [Integer: number of solving steps used]
-      </step_count>
     prompts:
       - |
         Solve the following math problem as a human-like problem-solving trace.
@@ -234,11 +237,16 @@ blocks:
 
         REMEMBER:
         - Use LaTeX ($...$ or $$...$$) for ALL mathematical expressions
-        - Break the solution into clear numbered steps
+        - Do not use "Step", "Level", "difficulty", or numbered stage labels in the solution or answer
+        - Use natural paragraph transitions instead of numbered steps
         - Show the intermediate calculations needed to verify the result
         - Easy problems should be direct; medium/hard problems may include natural hesitation, checking, or correction
         - Resolve any uncertainty before the final answer
-        - End with $$\boxed{final answer}$$
+        - The answer field must be a correct final response to the question, not a trace fragment
+        - The answer field must not include filler or hesitation
+        - The answer field must preserve the same voice as the trace; tone consistency is as important as concision
+        - The answer field should preserve the necessary calculation, condition check, verification, and units, not only the bare value
+        - End the solution with $$\boxed{final answer}$$
     outputs:
       - name: CoTSolution
         select: tag
@@ -246,21 +254,18 @@ blocks:
       - name: FinalAnswer
         select: tag
         tag: answer
-      - name: StepCount
-        select: tag
-        tag: step_count
     save_to:
       vars:
         cot_solution: CoTSolution
         final_answer: FinalAnswer
 
   # ============================================================
-  # Step 4: LaTeX検証と出力整形
+  # LaTeX検証と出力整形
   # ============================================================
   - type: python
     exec: 30
     id: validate_and_format
-    name: "Step 3: Validate LaTeX & Format Output"
+    name: "Validate LaTeX & Format Output"
     entrypoint: validate_and_format
     function_code: |
       import json
@@ -272,7 +277,6 @@ blocks:
           cot_solution: str,
           answer: str,
           problem_topic: str,
-          step_count: str,
       ) -> dict:
           """LaTeXの存在を検証し、最終JSON出力を整形する"""
 
@@ -305,17 +309,84 @@ blocks:
           elif inline_dollar < 4:
               warnings.append(f"LaTeX式が少なすぎます ($ count: {inline_dollar})")
           if not latex_rich:
-              warnings.append("基本的なLaTeXコマンド (\frac, \sum, \int等) が見つかりません")
+              warnings.append("基本的なLaTeXコマンド (\\frac, \\sum, \\int等) が見つかりません")
           if len(cot_solution) < 100:
               warnings.append("Solving trace is too short (under 100 characters)")
           if "$$\\boxed" not in cot_solution and "\\boxed" not in cot_solution:
               warnings.append("最終回答に \\boxed{} がありません")
+          if len(answer) < 90:
+              warnings.append(
+                  "Answer is too short; make it a final response with the needed calculation, "
+                  "condition check, verification, and units, not only the bare value"
+              )
 
-          # step_countを数値に変換
-          try:
-              steps = int(step_count) if step_count else 0
-          except (ValueError, TypeError):
-              steps = cot_solution.upper().count("STEP ")
+          answer_fillers = [
+              "hmm",
+              "let me check",
+              "at first glance",
+              "wait",
+              "actually",
+              "probably",
+              "maybe",
+              "seems",
+              "I think",
+              "I guess",
+          ]
+          used_answer_fillers = [
+              expr for expr in answer_fillers if expr.lower() in answer.lower()
+          ]
+          if used_answer_fillers:
+              warnings.append(
+                  "Answer contains filler or hesitation: " + ", ".join(used_answer_fillers)
+              )
+
+          answer_support_markers = [
+              "=",
+              "$",
+              "since",
+              "because",
+              "therefore",
+              "so",
+              "check",
+              "satisfies",
+              "condition",
+              "substituting",
+              "verify",
+              "unit",
+              "units",
+              "answer",
+              "maximum",
+              "minimum",
+              "greater",
+              "less",
+              "within",
+          ]
+          has_answer_support = any(
+              marker in answer.lower() for marker in answer_support_markers
+          )
+          if not has_answer_support:
+              warnings.append(
+                  "Answer lacks supporting calculation, condition check, verification, or conclusion marker"
+              )
+
+          meta_expressions = [
+              "Step",
+              "STEP",
+              "step",
+              "Level",
+              "LEVEL",
+              "level",
+              "difficulty",
+          ]
+          used_meta = [
+              expr for expr in meta_expressions
+              if expr in cot_solution or expr in answer
+          ]
+          meta_expression_valid = not used_meta
+          if used_meta:
+              warnings.append(
+                  "Meta expressions found in solution or answer: " + ", ".join(used_meta)
+              )
 
           # 出力JSONの構築
           output = {
@@ -325,8 +396,9 @@ blocks:
               "topic": problem_topic or "",
               "subtopic": ctx.vars.get("subtopic", ""),
               "difficulty": ctx.vars.get("difficulty", "medium"),
-              "step_count": steps,
               "latex_valid": has_latex and latex_rich,
+              "answer_support_valid": has_answer_support,
+              "meta_expression_valid": meta_expression_valid,
               "latex_dollar_count": inline_dollar,
               "latex_commands_found": found_commands,
               "latex_command_count": len(found_commands),
@@ -340,7 +412,7 @@ blocks:
               "info",
               f"Solving trace: {len(cot_solution)} chars, "
               f"latex_ok={has_latex and latex_rich}, "
-              f"steps={steps}, "
+              f"meta_ok={meta_expression_valid}, "
               f"commands={len(found_commands)}, "
               f"warnings={len(warnings)}",
           )
@@ -349,6 +421,8 @@ blocks:
               "OutputJSON": output_json,
               "OutputData": output,
               "LatexValid": has_latex and latex_rich,
+              "AnswerSupportValid": has_answer_support,
+              "MetaExpressionValid": meta_expression_valid,
               "LatexDollarCount": inline_dollar,
               "LatexCommandCount": len(found_commands),
               "Warnings": warnings,
@@ -359,9 +433,8 @@ blocks:
       cot_solution: "{CoTSolution}"
       answer: "{FinalAnswer}"
       problem_topic: "{ProblemTopic}"
-      step_count: "{StepCount}"
     outputs:
-      [OutputJSON, OutputData, LatexValid, LatexDollarCount, LatexCommandCount, Warnings, WarningCount]
+      [OutputJSON, OutputData, LatexValid, AnswerSupportValid, MetaExpressionValid, LatexDollarCount, LatexCommandCount, Warnings, WarningCount]
     ctx_access: ["vars.read", "log"]
 
   # ============================================================
@@ -382,10 +455,12 @@ blocks:
         value: "{ProblemTopic}"
       - name: difficulty
         value: "{difficulty}"
-      - name: step_count
-        value: "{StepCount}"
       - name: latex_valid
         value: "{LatexValid}"
+      - name: answer_support_valid
+        value: "{AnswerSupportValid}"
+      - name: meta_expression_valid
+        value: "{MetaExpressionValid}"
       - name: latex_dollar_count
         value: "{LatexDollarCount}"
       - name: latex_command_count
