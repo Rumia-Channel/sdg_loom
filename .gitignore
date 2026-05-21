@@ -157,3 +157,13 @@ flow/
 .claude
 CLAUDE.md
 AGENT.md
+
+# Agent/tool metadata
+.serena/
+
+# CocoIndex Code (ccc)
+/.cocoindex_code/
+
+# Generated JSONL outputs
+*.jsonl
+!/examples/data/*.jsonl

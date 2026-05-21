@@ -330,6 +330,7 @@ class PipelineEngine:
         """
         completed = 0
         errors = 0
+        last_update = 0
         rc = self._run_config
         io = rc.io
 
@@ -360,7 +361,9 @@ class PipelineEngine:
             task_ref: list[Any] = [None]
 
             async def _process_all() -> None:
-                nonlocal completed, errors
+                nonlocal completed, errors, last_update
+                proc_start = time.time()
+                last_update = 0
 
                 async for result in scheduler.schedule(
                     dataset, task_factory, processed_indices
@@ -390,6 +393,14 @@ class PipelineEngine:
 
                     if progress and task_ref[0] is not None:
                         progress.update(task_ref[0], advance=1)
+                        now = time.time()
+                        elapsed = now - proc_start
+                        if elapsed >= 1.0 and completed - last_update >= 5:
+                            last_update = completed
+                            tp = completed / elapsed * 60
+                            cc = scheduler.current_concurrency
+                            desc = f"[cyan]{completed}/{total_count or '?'} rows ({mode_label}) | 並列:{cc} 速度:{tp:.1f}行/分"
+                            progress.update(task_ref[0], description=desc)
 
             if progress:
                 with progress:

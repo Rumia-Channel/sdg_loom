@@ -41,6 +41,17 @@ class AdaptiveScheduler:
         self._enable_memory_monitoring = config.enable_memory_monitoring
         self._gc_interval = config.gc_interval
         self._memory_threshold_mb = config.memory_threshold_mb
+        self._controller: Optional[Any] = None
+
+    @property
+    def current_concurrency(self) -> int:
+        if self._controller is not None:
+            return self._controller.current_concurrency
+        return self._max_concurrent
+
+    @property
+    def is_adaptive(self) -> bool:
+        return True
 
     async def schedule(
         self,
@@ -104,6 +115,7 @@ class AdaptiveScheduler:
             target_queue_depth=self._target_queue_depth,
             initial_concurrency=self._max_concurrent,
         )
+        self._controller = controller
 
         # メトリクスコレクター（vllm / sglang オプション）
         metrics_collector: Optional[Any] = None

@@ -32,6 +32,14 @@ class FixedScheduler:
         self._gc_interval = config.gc_interval
         self._memory_threshold_mb = config.memory_threshold_mb
 
+    @property
+    def current_concurrency(self) -> int:
+        return self._max_concurrent
+
+    @property
+    def is_adaptive(self) -> bool:
+        return False
+
     async def schedule(
         self,
         dataset: Iterable,
