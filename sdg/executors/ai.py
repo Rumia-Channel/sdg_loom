@@ -1,5 +1,5 @@
 from __future__ import annotations
-import os, sys
+import os, sys, re
 from collections import ChainMap
 from typing import Any, Dict, List, Optional
 
@@ -17,6 +17,33 @@ from ..utils import (
 from .core import ExecutionContext, _apply_outputs
 
 
+_ENV_REF_RE = re.compile(r"^\$\{ENV\.([^}]+)\}$")
+
+
+def _resolve_required_env_ref(
+    value: Optional[str],
+    *,
+    model_name: str,
+    field: str,
+) -> Optional[str]:
+    """実行時モデル設定に残った ${ENV.NAME} を解決し、未設定なら明示的に失敗する。"""
+    if not isinstance(value, str):
+        return value
+
+    match = _ENV_REF_RE.match(value)
+    if not match:
+        return value
+
+    env_name = match.group(1)
+    resolved = os.environ.get(env_name)
+    if resolved is None:
+        raise ValueError(
+            f"Environment variable {env_name} is not set "
+            f"for model '{model_name}' field '{field}'"
+        )
+    return resolved
+
+
 def _build_clients(cfg: SDGConfig) -> Dict[str, LLMClient]:
     """モデルクライアントを構築"""
     clients: Dict[str, LLMClient] = {}
@@ -26,13 +53,16 @@ def _build_clients(cfg: SDGConfig) -> Dict[str, LLMClient]:
     http2 = cfg.optimization.get("http2", True)
 
     for m in cfg.models:
-        # 環境変数注入
-        api_key = m.api_key
-        if api_key.startswith("${ENV."):
-            env_name = api_key[6:-1]  # ${ENV.NAME} -> NAME
-            api_key = os.environ.get(env_name, "")
-
-        base_url = m.base_url or "https://api.openai.com"
+        api_key = _resolve_required_env_ref(
+            m.api_key,
+            model_name=m.name,
+            field="api_key",
+        )
+        base_url = _resolve_required_env_ref(
+            m.base_url,
+            model_name=m.name,
+            field="base_url",
+        ) or "https://api.openai.com"
         timeout = (m.request_defaults or {}).get("timeout_sec")
         clients[m.name] = LLMClient(
             base_url=base_url,
@@ -267,13 +297,18 @@ async def _execute_ai_block_single(
     if hasattr(cfg, "optimization") and cfg.optimization:
         retry_on_empty = cfg.optimization.get("retry_on_empty", True)
         retry_cfg["retry_on_empty"] = retry_on_empty
-    payload = {"model": model_def.api_model, "messages": msgs, **req_params}
+    api_model = _resolve_required_env_ref(
+        model_def.api_model,
+        model_name=model_def.name,
+        field="api_model",
+    )
+    payload = {"model": api_model, "messages": msgs, **req_params}
     result: LLMCallResult = await client._one_chat(payload, retry_cfg)
 
     # プロファイラーにLLM呼び出しを記録
     if profiler:
         profiler.record_llm_call(
-            model_name=model_def.api_model,
+            model_name=api_model,
             prompt_tokens=result.prompt_tokens,
             completion_tokens=result.completion_tokens,
             latency_ms=result.latency_ms,

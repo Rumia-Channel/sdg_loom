@@ -1,0 +1,50 @@
+{"topic":"Calculus","subtopic":"Limits by factoring removable singularities","difficulty":"easy"}
+{"topic":"Calculus","subtopic":"Continuity and one-sided limits for piecewise functions","difficulty":"medium"}
+{"topic":"Calculus","subtopic":"Differentiation using the product and chain rules","difficulty":"medium"}
+{"topic":"Calculus","subtopic":"Integration by parts with polynomial and exponential factors","difficulty":"medium"}
+{"topic":"Calculus","subtopic":"Improper integrals with parameter constraints","difficulty":"hard"}
+{"topic":"Calculus","subtopic":"Taylor polynomials with explicit error estimates","difficulty":"hard"}
+{"topic":"Calculus","subtopic":"Partial derivatives and tangent planes","difficulty":"hard"}
+{"topic":"Linear Algebra","subtopic":"Matrix multiplication and linear transformations","difficulty":"easy"}
+{"topic":"Linear Algebra","subtopic":"Determinants and inverses of 2x2 and 3x3 matrices","difficulty":"medium"}
+{"topic":"Linear Algebra","subtopic":"Solving linear systems by row reduction","difficulty":"medium"}
+{"topic":"Linear Algebra","subtopic":"Eigenvalues and eigenvectors of a 2x2 matrix","difficulty":"hard"}
+{"topic":"Linear Algebra","subtopic":"Diagonalization and powers of matrices","difficulty":"hard"}
+{"topic":"Probability Theory","subtopic":"Conditional probability from a two-way table","difficulty":"easy"}
+{"topic":"Probability Theory","subtopic":"Bayes theorem with false positives and false negatives","difficulty":"medium"}
+{"topic":"Probability Theory","subtopic":"Expected value and variance of a discrete random variable","difficulty":"medium"}
+{"topic":"Probability Theory","subtopic":"Binomial and Poisson distribution comparisons","difficulty":"medium"}
+{"topic":"Probability Theory","subtopic":"Moment generating functions and independence","difficulty":"hard"}
+{"topic":"Statistics","subtopic":"Confidence interval for a population mean","difficulty":"medium"}
+{"topic":"Statistics","subtopic":"Hypothesis testing with a z-test or t-test","difficulty":"medium"}
+{"topic":"Statistics","subtopic":"Maximum likelihood estimation for a one-parameter model","difficulty":"hard"}
+{"topic":"Differential Equations","subtopic":"First-order linear equations with integrating factors","difficulty":"medium"}
+{"topic":"Differential Equations","subtopic":"Second-order linear ODEs with constant coefficients","difficulty":"medium"}
+{"topic":"Differential Equations","subtopic":"Systems of linear ODEs using eigenvalues","difficulty":"hard"}
+{"topic":"Differential Equations","subtopic":"Laplace transforms for initial value problems","difficulty":"hard"}
+{"topic":"Number Theory","subtopic":"Modular arithmetic and least nonnegative residues","difficulty":"easy"}
+{"topic":"Number Theory","subtopic":"Divisibility, greatest common divisors, and Bezout identities","difficulty":"medium"}
+{"topic":"Number Theory","subtopic":"Linear congruences and the Chinese remainder theorem","difficulty":"medium"}
+{"topic":"Number Theory","subtopic":"Diophantine equations with integer constraints","difficulty":"hard"}
+{"topic":"Abstract Algebra","subtopic":"Cyclic groups and orders of elements","difficulty":"medium"}
+{"topic":"Abstract Algebra","subtopic":"Normal subgroups and quotient groups","difficulty":"hard"}
+{"topic":"Abstract Algebra","subtopic":"Ideals in polynomial quotient rings","difficulty":"hard"}
+{"topic":"Real Analysis","subtopic":"Convergence of sequences using epsilon arguments","difficulty":"medium"}
+{"topic":"Real Analysis","subtopic":"Convergence tests for infinite series","difficulty":"medium"}
+{"topic":"Real Analysis","subtopic":"Uniform continuity on intervals","difficulty":"hard"}
+{"topic":"Real Analysis","subtopic":"Riemann integrability and discontinuity sets","difficulty":"hard"}
+{"topic":"Complex Analysis","subtopic":"Cauchy-Riemann equations and analyticity","difficulty":"medium"}
+{"topic":"Complex Analysis","subtopic":"Contour integrals using the residue theorem","difficulty":"hard"}
+{"topic":"Complex Analysis","subtopic":"Laurent series and classification of singularities","difficulty":"hard"}
+{"topic":"Geometry","subtopic":"Euclidean triangle similarity and angle chasing","difficulty":"easy"}
+{"topic":"Geometry","subtopic":"Coordinate geometry of lines and circles","difficulty":"medium"}
+{"topic":"Geometry","subtopic":"Vector geometry in three dimensions","difficulty":"medium"}
+{"topic":"Discrete Mathematics","subtopic":"Counting with permutations and combinations","difficulty":"medium"}
+{"topic":"Discrete Mathematics","subtopic":"Graph paths, cycles, and trees","difficulty":"medium"}
+{"topic":"Discrete Mathematics","subtopic":"Recurrence relations with initial conditions","difficulty":"hard"}
+{"topic":"Discrete Mathematics","subtopic":"Mathematical induction proofs","difficulty":"medium"}
+{"topic":"Optimization","subtopic":"Linear programming with two variables","difficulty":"medium"}
+{"topic":"Optimization","subtopic":"Lagrange multipliers with one constraint","difficulty":"hard"}
+{"topic":"Optimization","subtopic":"Gradient descent updates for a quadratic objective","difficulty":"medium"}
+{"topic":"Numerical Analysis","subtopic":"Newton-Raphson method with error interpretation","difficulty":"medium"}
+{"topic":"Numerical Analysis","subtopic":"Numerical integration using trapezoidal and Simpson rules","difficulty":"medium"}

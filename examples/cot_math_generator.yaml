@@ -1,0 +1,380 @@
+# Mathematical Worked-Solution Dataset Generator
+# 数式はLaTeX文法で記述。問題生成→段階的な解答解説→出力整形のパイプライン。
+#
+# 実行例:
+#   sdg run --yaml examples/cot_math_generator.yaml --input examples/data/cot_math_seeds.jsonl --output cot_result.jsonl
+#   sdg test-run --yaml examples/cot_math_generator.yaml --input examples/data/cot_math_seeds.jsonl
+
+mabel:
+  version: "2.0"
+  id: "com.example.cot_math_generator"
+  name: "Mathematical Worked-Solution Dataset Generator"
+  description: |
+    数学トピックを与えると、LaTeX数式を含む問題文と、
+    段階的な解答解説、最終回答を生成する。
+
+globals:
+  const:
+    APP_NAME: "Worked-Solution Math Generator v1"
+  vars:
+    problem: ""
+    cot_solution: ""
+    final_answer: ""
+    problem_topic: ""
+
+budgets:
+  ai:
+    max_calls: 200
+    max_tokens: 1000000
+  wall_time_ms: 7200000
+
+# モデル設定: ユーザ環境に合わせて変更してください
+models:
+  - name: math_solver
+    api_model: "${ENV.SDG_API_MODEL}"
+    api_key: "${ENV.SDG_API_KEY}"
+    base_url: "${ENV.SDG_BASE_URL}"
+    request_defaults:
+      temperature: 0.3
+      max_tokens: 8192
+      top_p: 0.95
+
+blocks:
+  # ============================================================
+  # Step 1: 初期化
+  # ============================================================
+  - type: logic
+    exec: 1
+    id: init
+    name: "Initialize Variables"
+    op: set
+    var: iteration
+    value: 0
+    outputs:
+      - name: Iteration
+        from: value
+
+  # ============================================================
+  # Step 2: 数学問題の生成
+  # ============================================================
+  - type: ai
+    exec: 10
+    id: generate_problem
+    name: "Step 1: Generate Math Problem"
+    model: math_solver
+    system_prompt: |
+      You are a mathematics curriculum writer creating high-quality assessment problems.
+
+      # Task
+      Generate one well-defined, self-contained problem based on the given topic and subtopic.
+
+      # LaTeX Requirements
+      Use LaTeX notation for every mathematical expression:
+      - Inline math: $f(x) = x^2 + 3x - 5$
+      - Display/block math: $$\int_{0}^{\infty} e^{-x^2} dx = \frac{\sqrt{\pi}}{2}$$
+      - Fractions: $\frac{a}{b}$, $\dfrac{numerator}{denominator}$
+      - Sums/Products: $\sum_{i=1}^{n} i = \frac{n(n+1)}{2}$
+      - Limits: $\lim_{x \to \infty} f(x)$
+      - Matrices: $\begin{pmatrix} a & b \\ c & d \end{pmatrix}$
+      - Greek letters: $\alpha, \beta, \gamma, \theta, \pi, \sigma, \mu$
+      - Special functions: $\sin, \cos, \tan, \log, \ln, \exp$
+
+      # Problem Requirements
+      - The problem must be completely self-contained (no external references)
+      - Include concrete numerical values or explicit symbolic definitions
+      - Vary complexity according to the specified difficulty level
+      - Include exactly ONE clear question to answer
+      - Avoid ambiguous wording, missing assumptions, and multiple possible interpretations
+      - Difficulty guidance:
+        * easy: 2-4 solution steps, focused on one main idea
+        * medium: 4-7 solution steps, with at least one intermediate transformation
+        * hard: 6-10 solution steps, with a non-trivial derivation or insight
+
+      # Output Format (MUST follow exactly)
+      <problem>
+      [Complete problem statement with LaTeX for all math]
+      </problem>
+      <topic>
+      [2-5 word topic label in English]
+      </topic>
+      <difficulty_actual>
+      [easy/medium/hard - your assessment of actual difficulty]
+      </difficulty_actual>
+    prompts:
+      - |
+        Generate a math problem with the following specifications:
+
+        - Domain: {topic}
+        - Subtopic: {subtopic}
+        - Target Difficulty: {difficulty}
+
+        Create an original, self-contained problem that directly tests the subtopic.
+        Use LaTeX for all mathematical expressions and include exactly one question.
+    outputs:
+      - name: Problem
+        select: tag
+        tag: problem
+      - name: ProblemTopic
+        select: tag
+        tag: topic
+      - name: ActualDifficulty
+        select: tag
+        tag: difficulty_actual
+    save_to:
+      vars:
+        problem: Problem
+        problem_topic: ProblemTopic
+
+  # ============================================================
+  # Step 3: Worked solution generation
+  # ============================================================
+  - type: ai
+    exec: 20
+    id: generate_solution
+    name: "Step 2: Generate Worked Solution"
+    model: math_solver
+    system_prompt: |
+      You are a mathematics professor who writes clear worked solutions for students.
+
+      # Task
+      Solve the given math problem with a concise, step-by-step worked solution.
+
+      # LaTeX Requirements
+      Format all mathematical expressions in LaTeX. Examples of correct formatting:
+
+      INLINE MATH (use $...$):
+      - "The derivative $f'(x) = 3x^2 - 6x + 2$ is found by..."
+      - "Since $\Delta = b^2 - 4ac = 49 > 0$, there are two real roots."
+      - "Applying the chain rule: $\frac{d}{dx}[\sin(x^2)] = 2x \cos(x^2)$"
+
+      DISPLAY MATH (use $$...$$ for important equations):
+      - $$\sum_{k=1}^{n} k = \frac{n(n+1)}{2}$$
+      - $$\lim_{h \to 0} \frac{f(x+h) - f(x)}{h} = f'(x)$$
+      - $$\int_{0}^{1} x^n dx = \frac{1}{n+1}$$
+      - $$\begin{vmatrix} a & b \\ c & d \end{vmatrix} = ad - bc$$
+
+      LaTeX commands you should use:
+      - Fractions: \frac{num}{den}
+      - Square roots: \sqrt{x}, nth roots: \sqrt[n]{x}
+      - Sums: \sum_{i=1}^{n}, Products: \prod_{i=1}^{n}
+      - Integrals: \int_{a}^{b}, \iint, \iiint, \oint
+      - Limits: \lim_{x \to a}, \lim_{x \to \infty}
+      - Greek: \alpha \beta \gamma \delta \epsilon \theta \lambda \mu \pi \sigma \phi \omega
+      - Operators: \sin \cos \tan \log \ln \exp \gcd \lcm
+      - Relations: \leq \geq \neq \approx \equiv \propto \sim
+      - Arrows: \to \rightarrow \Rightarrow \iff
+      - Sets: \mathbb{R} \mathbb{N} \mathbb{Z} \mathbb{C}
+      - Brackets: \left( ... \right) \left[ ... \right] \left\{ ... \right\}
+      - Matrix: \begin{pmatrix} ... \end{pmatrix} or \begin{bmatrix} ... \end{bmatrix}
+      - Cases: \begin{cases} ... \end{cases}
+      - Align: \begin{aligned} ... \end{aligned}
+      - Boxed answer: \boxed{...} for the final answer
+
+      # Reasoning Requirements
+      1. Break the solution into clearly NUMBERED steps (Step 1, Step 2, ...)
+      2. For each step:
+         a. State what you are computing/analyzing in PLAIN TEXT
+         b. Show the mathematical work using PROPER LaTeX
+         c. Explain the reasoning or justification (why this step, what theorem/rule)
+      3. Show the intermediate calculations needed to verify the answer
+      4. Define any new variables or notation you introduce
+      5. If using a theorem (e.g., quadratic formula, L'Hopital's rule, integration by parts),
+         state it explicitly
+      6. Avoid irrelevant commentary and keep the solution focused
+
+      # Output Format (MUST follow exactly)
+      <cot>
+      Step 1: [Brief description of what this step does]
+
+      $$ equation or working $$
+
+      Explanation: [1-3 sentences explaining the reasoning]
+
+      Step 2: [Brief description]
+
+      $ intermediate calculation $
+
+      Explanation: [1-3 sentences]
+
+      ... (continue all steps)
+
+      **Final Answer:** $$\boxed{answer}$$
+      </cot>
+      <answer>
+      [The final answer in concise form. Use LaTeX if mathematical.]
+      </answer>
+      <step_count>
+      [Integer: number of reasoning steps used]
+      </step_count>
+    prompts:
+      - |
+        Solve the following math problem with a clear, step-by-step worked solution.
+
+        ═══════════════════════════════════════
+        PROBLEM:
+        {Problem}
+        ═══════════════════════════════════════
+
+        REMEMBER:
+        - Use LaTeX ($...$ or $$...$$) for ALL mathematical expressions
+        - Break the solution into clear numbered steps
+        - Show the intermediate calculations needed to verify the result
+        - End with $$\boxed{final answer}$$
+    outputs:
+      - name: CoTSolution
+        select: tag
+        tag: cot
+      - name: FinalAnswer
+        select: tag
+        tag: answer
+      - name: StepCount
+        select: tag
+        tag: step_count
+    save_to:
+      vars:
+        cot_solution: CoTSolution
+        final_answer: FinalAnswer
+
+  # ============================================================
+  # Step 4: LaTeX検証と出力整形
+  # ============================================================
+  - type: python
+    exec: 30
+    id: validate_and_format
+    name: "Step 3: Validate LaTeX & Format Output"
+    entrypoint: validate_and_format
+    function_code: |
+      import json
+      import re
+
+      def validate_and_format(
+          ctx,
+          problem: str,
+          cot_solution: str,
+          answer: str,
+          problem_topic: str,
+          step_count: str,
+      ) -> dict:
+          """LaTeXの存在を検証し、最終JSON出力を整形する"""
+
+          problem = (problem or "").strip()
+          cot_solution = (cot_solution or "").strip()
+          answer = (answer or "").strip()
+
+          # LaTeX検証: $記号の数を数える
+          inline_dollar = cot_solution.count("$")
+          display_dollar = cot_solution.count("$$")
+          has_latex = inline_dollar >= 2
+
+          # 基本的なLaTeXコマンドの存在確認
+          latex_commands = [
+              r"\frac", r"\sqrt", r"\sum", r"\int", r"\lim",
+              r"\alpha", r"\beta", r"\gamma", r"\theta", r"\pi",
+              r"\sin", r"\cos", r"\log", r"\ln", r"\cdot", r"\times",
+              r"\leq", r"\geq", r"\neq", r"\infty", r"\partial",
+              r"\mathrm", r"\mathbb", r"\mathcal", r"\mathbf",
+              r"\begin", r"\end", r"\left", r"\right",
+              r"\boxed", r"\text", r"\implies", r"\iff",
+          ]
+          found_commands = [c for c in latex_commands if c in cot_solution]
+          latex_rich = len(found_commands) >= 2  # 少なくとも2種類のLaTeXコマンド
+
+          # 警告収集
+          warnings = []
+          if not has_latex:
+              warnings.append("LaTeX記法 ($) が見つかりません")
+          elif inline_dollar < 4:
+              warnings.append(f"LaTeX式が少なすぎます ($ count: {inline_dollar})")
+          if not latex_rich:
+              warnings.append("基本的なLaTeXコマンド (\frac, \sum, \int等) が見つかりません")
+          if len(cot_solution) < 100:
+              warnings.append("推論過程が短すぎます (100文字未満)")
+          if "$$\\boxed" not in cot_solution and "\\boxed" not in cot_solution:
+              warnings.append("最終回答に \\boxed{} がありません")
+
+          # step_countを数値に変換
+          try:
+              steps = int(step_count) if step_count else 0
+          except (ValueError, TypeError):
+              steps = cot_solution.upper().count("STEP ")
+
+          # 出力JSONの構築
+          output = {
+              "problem": problem,
+              "cot_solution": cot_solution,
+              "answer": answer,
+              "topic": problem_topic or "",
+              "subtopic": ctx.vars.get("subtopic", ""),
+              "difficulty": ctx.vars.get("difficulty", "medium"),
+              "step_count": steps,
+              "latex_valid": has_latex and latex_rich,
+              "latex_dollar_count": inline_dollar,
+              "latex_commands_found": found_commands,
+              "latex_command_count": len(found_commands),
+              "warnings": warnings,
+              "warning_count": len(warnings),
+          }
+
+          output_json = json.dumps(output, ensure_ascii=False, indent=2)
+
+          ctx.log(
+              "info",
+              f"CoT result: {len(cot_solution)} chars, "
+              f"latex_ok={has_latex and latex_rich}, "
+              f"steps={steps}, "
+              f"commands={len(found_commands)}, "
+              f"warnings={len(warnings)}",
+          )
+
+          return {
+              "OutputJSON": output_json,
+              "OutputData": output,
+              "LatexValid": has_latex and latex_rich,
+              "LatexDollarCount": inline_dollar,
+              "LatexCommandCount": len(found_commands),
+              "Warnings": warnings,
+              "WarningCount": len(warnings),
+          }
+    inputs:
+      problem: "{Problem}"
+      cot_solution: "{CoTSolution}"
+      answer: "{FinalAnswer}"
+      problem_topic: "{ProblemTopic}"
+      step_count: "{StepCount}"
+    outputs:
+      [OutputJSON, OutputData, LatexValid, LatexDollarCount, LatexCommandCount, Warnings, WarningCount]
+    ctx_access: ["vars.read", "log"]
+
+  # ============================================================
+  # 終了ブロック: 最終出力
+  # ============================================================
+  - type: end
+    exec: 100
+    reason: "cot_generation_completed"
+    exit_code: "success"
+    final:
+      - name: problem
+        value: "{Problem}"
+      - name: cot_solution
+        value: "{CoTSolution}"
+      - name: answer
+        value: "{FinalAnswer}"
+      - name: topic
+        value: "{ProblemTopic}"
+      - name: difficulty
+        value: "{difficulty}"
+      - name: step_count
+        value: "{StepCount}"
+      - name: latex_valid
+        value: "{LatexValid}"
+      - name: latex_dollar_count
+        value: "{LatexDollarCount}"
+      - name: latex_command_count
+        value: "{LatexCommandCount}"
+      - name: warning_count
+        value: "{WarningCount}"
+      - name: warnings
+        value: "{Warnings}"
+      - name: output_json
+        value: "{OutputJSON}"
+    final_mode: "map"

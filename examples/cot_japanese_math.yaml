@@ -1,0 +1,442 @@
+# 日本語・算数/数学 文章題データセット生成パイプライン
+# GRPOステップアップ学習用: 各レベルは直前までの全レベルを前提知識とする依存構造。
+#
+# レベル設計の原則:
+#   Level N は Level 1〜N-1 の全知識を前提とし、その上に新概念を1つ積み上げる。
+#   Level N の問題を解くには Level 1〜N-1 の技法が必須となるように設計。
+#   GRPOでLevel 1から順に学習することで、破綻なく段階的に数学能力を獲得できる。
+#   文体は全レベルで一貫して理論的・数学的な正式な日本語を用いる。
+#
+# モデル指定: 環境変数で実行時に指定
+#   SDG_API_MODEL : モデル名 (例: qwen3, gpt-4o)
+#   SDG_API_KEY   : APIキー
+#   SDG_BASE_URL  : プロバイダURL (例: http://localhost:8000/v1)
+#
+# 実行例:
+#   # テスト実行 (1件)
+#   $env:SDG_API_MODEL="qwen3"; $env:SDG_API_KEY="sk-local"; $env:SDG_BASE_URL="http://localhost:8000/v1"
+#   sdg test-run --yaml examples/cot_japanese_math.yaml --input examples/data/cot_japanese_math_seeds.jsonl
+#
+#   # 本番実行 (全55件)
+#   sdg run --yaml examples/cot_japanese_math.yaml --input examples/data/cot_japanese_math_seeds.jsonl --output japanese_math_cot.jsonl
+#
+#   # 大規模向け: 適応的並行性 + 共有トランスポート
+#   sdg run --yaml examples/cot_japanese_math.yaml --input examples/data/cot_japanese_math_seeds.jsonl --output japanese_math_cot.jsonl --adaptive --max-batch 32 --target-latency-ms 2000 --use-shared-transport
+#
+# bash/Linux の場合:
+#   export SDG_API_MODEL="qwen3" SDG_API_KEY="sk-local" SDG_BASE_URL="http://localhost:8000/v1"
+#   sdg test-run --yaml examples/cot_japanese_math.yaml --input examples/data/cot_japanese_math_seeds.jsonl
+
+mabel:
+  version: "2.0"
+  id: "com.example.cot_japanese_math"
+  name: "日本語 算数・数学 文章題データセット生成器 (GRPO用)"
+  description: |
+    前提知識を段階的に積み上げるレベル設計(1〜14)。
+    日本語の文章題、解答解説、最終回答を一貫した形式で生成する。
+
+globals:
+  const:
+    APP_NAME: "日本語算数数学データセット生成器"
+
+  vars:
+    problem: ""
+    cot_solution: ""
+    final_answer: ""
+
+budgets:
+  ai:
+    max_calls: 200
+    max_tokens: 1000000
+  wall_time_ms: 7200000
+
+models:
+  - name: math_solver
+    api_model: "${ENV.SDG_API_MODEL}"
+    api_key: "${ENV.SDG_API_KEY}"
+    base_url: "${ENV.SDG_BASE_URL}"
+    request_defaults:
+      temperature: 0.3
+      max_tokens: 8192
+      top_p: 0.95
+
+blocks:
+  # ============================================================
+  # Step 1: 変数初期化
+  # ============================================================
+  - type: logic
+    exec: 1
+    id: init
+    name: "変数初期化"
+    op: set
+    var: iteration
+    value: 0
+    outputs:
+      - name: Iteration
+        from: value
+
+  # ============================================================
+  # Step 2: 日本語文章題の生成
+  # ============================================================
+  - type: ai
+    exec: 10
+    id: generate_problem
+    name: "Step 1: 日本語文章題の生成"
+    model: math_solver
+    system_prompt: |
+      あなたは数学教材向けの文章題を作成する専門家です。
+      与えられた seed をもとに、条件が明確で、答えが一意に定まる問題文を作成してください。
+
+      # 最重要指示
+      - すべての出力は日本語で記述すること
+      - 数式は LaTeX 記法（$...$ または $$...$$）で記述すること
+      - 学年に応じて自然に読める文体にしつつ、幼稚な口調や曖昧な表現を避けること
+      - 出題する問いは1つに絞り、条件不足や複数解を生む設定にしないこと
+
+      # レベル体系：前提知識の積み上げ構造
+      Level 1 は数学の出発点であり、前提知識を要求しない。
+      Level 2 以降は、それ以前の全レベルの習得を前提とする。
+      Level N の問題では、Level 1〜N-1 の知識を少なくとも1つ自然に使うように設計する。
+
+      | Lv | 新規導入概念 | 前提となる既習事項 |
+      |----|-------------|-------------------|
+      | 1 | 一桁の加減、数の大小 | なし（出発点）|
+      | 2 | 二桁以上の加減、繰上・繰下、筆算の考え方 | Lv1: 一桁の加減、数の概念 |
+      | 3 | 九九と乗法の意味（同数累加）| Lv1-2: 加減算全般 |
+      | 4 | 割り算（等分除・包含除）、余りのある除法 | Lv1-3: 加減乗全般 |
+      | 5 | 小数の四則演算、位取り | Lv1-4: 整数四則 |
+      | 6 | 分数の四則演算、通分・約分 | Lv1-5: 整数・小数四則 |
+      | 7 | 文字式、一次方程式、正負の数 | Lv1-6: 全四則演算 |
+      | 8 | 連立方程式、不等式 | Lv1-7: 一次方程式まで |
+      | 9 | 二次方程式、因数分解、平方根 | Lv1-8: 連立方程式・不等式まで |
+      | 10 | 関数(一次・二次)、三角比 | Lv1-9: 二次方程式・因数分解まで |
+      | 11 | 極限、微分係数、導関数、接線、増減表と極値 | Lv1-10: 関数全般まで |
+      | 12 | 不定積分・定積分、面積・体積 | Lv1-11: 微分まで |
+      | 13 | 行列・行列式・固有値、偏微分、重積分 | Lv1-12: 微積分の基礎まで |
+      | 14 | 群論・複素解析・位相空間 | Lv1-13: 大学教養数学まで |
+
+      # 文章題作成の鉄則
+      1. seed の場面をそのまま丸写しせず、自然な文章題として完成させる。
+      2. 指定されたレベルの新規導入概念を問題の中心に置く。
+      3. Level 1 では新規導入概念だけで解ける問題にする。
+      4. Level 2 以降では、前提レベルの知識が少なくとも1つ必要になるよう数値・条件を設計する。
+      5. 数値は具体的かつ現実的にし、単位が必要な場合は必ず明示する。
+      6. LaTeX 数式は $...$ で囲む。
+
+      # 出力形式（厳守）
+      <problem>
+      [日本語の文章題。以下の順で簡潔に記述:
+       1. 場面・状況の説明
+       2. 数値・条件の提示
+       3. 問いかけの文（「〜を求めよ」「〜の値を求めよ」）
+       数式は $...$ で囲む。]
+      </problem>
+      <topic>
+      [単元名。例: 一次方程式、分数の乗除、導関数と接線]
+      </topic>
+      <prerequisites_used>
+      [この問題の解答で実際に使われる前提知識を列挙。Level 1 の場合は「なし」と書く。]
+      </prerequisites_used>
+    prompts:
+      - |
+        以下の seed をもとに、数学の日本語文章題を作成してください。
+
+        【対象レベル】 Level {level}
+        【新規導入概念】 {new_concept}
+        【既習事項】 {prerequisites}
+        【単元・分野】 {topic}
+        【文章題の場面】 {scenario}
+
+        【最重要の作成指示】
+        この問題は Level {level} の評価に使います。
+        新規導入概念（{new_concept}）が問題の中心になるようにしてください。
+        既習事項が「なし」の場合は、既習事項を要求せず、新規導入概念だけで解ける問題にしてください。
+        既習事項がある場合は、解答の途中で {prerequisites} の知識を少なくとも1つ自然に使う問題にしてください。
+
+        具体的には:
+        - 問題文の核心が {new_concept} であること
+        - 条件が明確で、答えが一意に定まること
+        - seed の場面を活かしつつ、文章題として自然に読めること
+
+        【文体】
+        学年に応じて読みやすく、かつ数学的に正確な日本語を使用すること。
+    outputs:
+      - name: Problem
+        select: tag
+        tag: problem
+      - name: ProblemTopic
+        select: tag
+        tag: topic
+      - name: PrerequisitesUsed
+        select: tag
+        tag: prerequisites_used
+    save_to:
+      vars:
+        problem: Problem
+
+  # ============================================================
+  # Step 3: 日本語による段階的解答解説の生成
+  # ============================================================
+  - type: ai
+    exec: 20
+    id: generate_solution
+    name: "Step 2: 日本語の解答解説の生成"
+    model: math_solver
+    system_prompt: |
+      あなたは数学の解答解説を作成する専門家です。
+      読者に提示できる形で、問題の解法を段階的かつ正確に説明してください。
+
+      # 最重要指示
+      - すべての説明は日本語で記述すること
+      - 数式は必ず LaTeX 記法（$...$ または $$...$$）で記述すること
+      - 解答の最後に「答え:」を明示すること
+
+      # 解答解説の原則
+      1. 「Step 1:」「Step 2:」のように段階を明確に区切る。
+      2. 各段階で、何を求めるのかを短く説明する。
+      3. 計算・式変形は LaTeX で示す。
+      4. 必要に応じて、使った性質・公式・定理を自然に説明する。
+      5. 不要に長い雑談や自己言及を入れず、解答に必要な内容だけを書く。
+      6. 最終解答には「答え:」または $\boxed{}$ を付ける。
+
+      # LaTeX記法の例
+      インライン: $x^2 + y^2 = z^2$
+      ディスプレイ（重要な式は中央揃え）:
+      $$
+      \int_{0}^{1} x^n \,dx = \frac{1}{n+1}
+      $$
+      分数: $\frac{a}{b}$、平方根: $\sqrt{x}$、総和: $\sum_{k=1}^{n} k = \frac{n(n+1)}{2}$
+      三角関数: $\sin\theta, \cos\theta, \tan\theta$
+      極限: $\lim_{x \to \infty} f(x)$、微分: $\frac{d}{dx}f(x)$、積分: $\int_a^b f(x)dx$
+      ベクトル: $\vec{a}$、行列: $\begin{pmatrix} a & b \\ c & d \end{pmatrix}$
+      場合分け: $\begin{cases} x^2 & (x \geq 0) \\ 0 & (x < 0) \end{cases}$
+
+      # 出力形式（厳守）
+      <cot>
+      Step 1: [この段階で行う操作の説明]
+
+      [式変形・計算をLaTeXで記述]
+
+      根拠: [用いた定理・公式・数学的性質]
+
+      Step 2: [次の段階の説明]
+
+      [式変形・計算]
+
+      根拠: [用いた定理・公式・数学的性質]
+
+      ...（必要な段階数だけ繰り返す）
+
+      **答え:** $$\boxed{最終的な答え}$$
+      </cot>
+      <answer>
+      [簡潔な最終回答。数値がある場合は単位も含める]
+      </answer>
+      <step_count>
+      [整数: 解答解説の段階数]
+      </step_count>
+    prompts:
+      - |
+        以下の数学の文章題を、日本語で段階的に解説してください。
+
+        ═══════════════════════════════════════
+        【問題】
+        {Problem}
+        ═══════════════════════════════════════
+
+        【対象レベル】 Level {level}
+        【新規導入概念】 {new_concept}
+        【既習事項】 {prerequisites}
+
+        【解答作成の注意】
+        - 全編日本語、数式はLaTeX記法（$...$ または $$...$$）
+        - 各Stepで、用いる数学的操作を自然に言及する
+          例: 「割り算を用いて」「分数の通分により」「二次方程式の解の公式を適用して」
+        - 必要に応じて、操作の根拠（定理・公式・性質）を説明する
+        - 最終的な答えには「答え:」または $\boxed{}$ を付ける
+    outputs:
+      - name: CoTSolution
+        select: tag
+        tag: cot
+      - name: FinalAnswer
+        select: tag
+        tag: answer
+      - name: StepCount
+        select: tag
+        tag: step_count
+    save_to:
+      vars:
+        cot_solution: CoTSolution
+        final_answer: FinalAnswer
+
+  # ============================================================
+  # Step 4: 出力検証と整形
+  # ============================================================
+  - type: python
+    exec: 30
+    id: validate_and_format
+    name: "Step 3: 検証と最終整形"
+    entrypoint: validate_and_format
+    function_code: |
+      import json
+      import re
+
+      def validate_and_format(
+          ctx,
+          problem: str,
+          cot_solution: str,
+          answer: str,
+          problem_topic: str,
+          step_count: str,
+          prereqs_used: str,
+      ) -> dict:
+          """日本語CoT出力の検証と整形"""
+
+          problem = (problem or "").strip()
+          cot_solution = (cot_solution or "").strip()
+          answer = (answer or "").strip()
+
+          # --- LaTeX検証 ---
+          inline_dollar = cot_solution.count("$")
+          has_latex = inline_dollar >= 2
+
+          latex_commands = [
+              r"\frac", r"\sqrt", r"\sum", r"\int", r"\lim",
+              r"\sin", r"\cos", r"\log", r"\ln", r"\cdot", r"\times",
+              r"\leq", r"\geq", r"\neq", r"\infty", r"\partial",
+              r"\begin", r"\end", r"\left", r"\right",
+              r"\boxed", r"\text", r"\implies", r"\iff",
+          ]
+          found_commands = [c for c in latex_commands if c in cot_solution]
+
+          # --- 日本語品質チェック ---
+          has_japanese = bool(re.search(
+              r'[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF]', cot_solution
+          ))
+          has_answer_marker = "答え" in cot_solution or "解答" in cot_solution
+
+          try:
+              level_num = int(ctx.vars.get("level", "1"))
+          except (ValueError, TypeError):
+              level_num = 1
+
+          # --- 警告収集 ---
+          warnings = []
+          if not has_latex:
+              warnings.append("LaTeX記法 ($) が見つかりません")
+          elif inline_dollar < 4 and level_num >= 3:
+              warnings.append(f"LaTeX式が少なすぎます ($ count: {inline_dollar})")
+          if len(cot_solution) < 50:
+              warnings.append("推論過程が短すぎます (50文字未満)")
+          if not has_japanese:
+              warnings.append("日本語文字（ひらがな・漢字等）が含まれていません")
+          if not has_answer_marker:
+              warnings.append("解答に「答え」の明示がありません")
+          if level_num >= 4 and "\\boxed" not in cot_solution:
+              warnings.append("最終回答に \\boxed{} がありません")
+
+          try:
+              steps = int(step_count) if step_count else 0
+          except (ValueError, TypeError):
+              steps = cot_solution.upper().count("STEP ")
+
+          output = {
+              "level": level_num,
+              "grade": ctx.vars.get("grade", ""),
+              "new_concept": ctx.vars.get("new_concept", ""),
+              "prerequisites": ctx.vars.get("prerequisites", ""),
+              "prerequisites_used": prereqs_used or "",
+              "problem": problem,
+              "cot_solution": cot_solution,
+              "answer": answer,
+              "topic": problem_topic or ctx.vars.get("topic", ""),
+              "scenario": ctx.vars.get("scenario", ""),
+              "step_count": steps,
+              "latex_dollar_count": inline_dollar,
+              "latex_commands_found": found_commands,
+              "latex_command_count": len(found_commands),
+              "latex_valid": has_latex,
+              "japanese_valid": has_japanese,
+              "answer_marker_valid": has_answer_marker,
+              "warnings": warnings,
+              "warning_count": len(warnings),
+          }
+
+          output_json = json.dumps(output, ensure_ascii=False, indent=2)
+
+          ctx.log(
+              "info",
+              f"Lv{level_num}: {len(cot_solution)}chars, "
+              f"latex={has_latex}, jp={has_japanese}, "
+              f"steps={steps}, warn={len(warnings)}",
+          )
+
+          return {
+              "OutputJSON": output_json,
+              "OutputData": output,
+              "LatexValid": has_latex,
+              "JapaneseValid": has_japanese,
+              "AnswerMarkerValid": has_answer_marker,
+              "LatexDollarCount": inline_dollar,
+              "LatexCommandCount": len(found_commands),
+              "Warnings": warnings,
+              "WarningCount": len(warnings),
+          }
+    inputs:
+      problem: "{Problem}"
+      cot_solution: "{CoTSolution}"
+      answer: "{FinalAnswer}"
+      problem_topic: "{ProblemTopic}"
+      step_count: "{StepCount}"
+      prereqs_used: "{PrerequisitesUsed}"
+    outputs:
+      [OutputJSON, OutputData, LatexValid, JapaneseValid, AnswerMarkerValid, LatexDollarCount, LatexCommandCount, Warnings, WarningCount]
+    ctx_access: ["vars.read", "log"]
+
+  # ============================================================
+  # Step 5: 終了ブロック
+  # ============================================================
+  - type: end
+    exec: 100
+    reason: "japanese_cot_generation_completed"
+    exit_code: "success"
+    final:
+      - name: level
+        value: "{level}"
+      - name: grade
+        value: "{grade}"
+      - name: new_concept
+        value: "{new_concept}"
+      - name: prerequisites
+        value: "{prerequisites}"
+      - name: prerequisites_used
+        value: "{PrerequisitesUsed}"
+      - name: problem
+        value: "{Problem}"
+      - name: cot_solution
+        value: "{CoTSolution}"
+      - name: answer
+        value: "{FinalAnswer}"
+      - name: topic
+        value: "{ProblemTopic}"
+      - name: scenario
+        value: "{scenario}"
+      - name: step_count
+        value: "{StepCount}"
+      - name: latex_valid
+        value: "{LatexValid}"
+      - name: japanese_valid
+        value: "{JapaneseValid}"
+      - name: answer_marker_valid
+        value: "{AnswerMarkerValid}"
+      - name: latex_dollar_count
+        value: "{LatexDollarCount}"
+      - name: latex_command_count
+        value: "{LatexCommandCount}"
+      - name: warning_count
+        value: "{WarningCount}"
+      - name: warnings
+        value: "{Warnings}"
+      - name: output_json
+        value: "{OutputJSON}"
+    final_mode: "map"

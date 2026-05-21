@@ -40,6 +40,25 @@ def _ensure_json_obj(v: Any) -> Any:
 _ENV_PATTERN = re.compile(r"^\$\{ENV\.([^}]+)\}$")
 
 
+def _resolve_env_ref(v: Any) -> Any:
+    """${ENV.NAME} 形式の文字列を環境変数から解決する。"""
+    if isinstance(v, str):
+        m = _ENV_PATTERN.match(v)
+        if m:
+            env_name = m.group(1)
+            return os.environ.get(env_name, v)
+    return v
+
+
+def _resolve_env_refs(v: Any) -> Any:
+    """dict/list を再帰的に走査して ${ENV.NAME} 形式を解決する。"""
+    if isinstance(v, dict):
+        return {k: _resolve_env_refs(value) for k, value in v.items()}
+    if isinstance(v, list):
+        return [_resolve_env_refs(value) for value in v]
+    return _resolve_env_ref(v)
+
+
 # ---------------------------------------------------------------------------
 # 設定クラス群
 # ---------------------------------------------------------------------------
@@ -144,16 +163,17 @@ class ModelConfig(BaseModel):
     # OpenRouter プロバイダールーティング設定
     provider: Optional[Dict[str, Any]] = None
 
-    @field_validator("api_key", mode="before")
+    @field_validator("api_model", "api_key", "base_url", "organization", mode="before")
     @classmethod
-    def resolve_env_api_key(cls, v: Any) -> Any:
+    def resolve_env_string_fields(cls, v: Any) -> Any:
         """${ENV.NAME} 形式の環境変数参照を解決する"""
-        if isinstance(v, str):
-            m = _ENV_PATTERN.match(v)
-            if m:
-                env_name = m.group(1)
-                return os.environ.get(env_name, v)
-        return v
+        return _resolve_env_ref(v)
+
+    @field_validator("headers", "request_defaults", "provider", mode="before")
+    @classmethod
+    def resolve_env_mapping_fields(cls, v: Any) -> Any:
+        """辞書・配列内の ${ENV.NAME} 形式も環境変数参照として解決する"""
+        return _resolve_env_refs(v)
 
 
 class TemplateDef(BaseModel):
