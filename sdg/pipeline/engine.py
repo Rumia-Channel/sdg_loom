@@ -61,6 +61,8 @@ class PipelineEngine:
         """
         self._cfg = cfg
         self._run_config = run_config or RunConfig()
+        self._last_completed_rows = 0
+        self._last_error_rows = 0
 
     # ------------------------------------------------------------------
     # 内部ヘルパー
@@ -108,6 +110,9 @@ class PipelineEngine:
             target_latency_ms=cc.target_latency_ms,
             target_queue_depth=cc.target_queue_depth,
             metrics_type=cc.metrics_type,
+            adaptive_reprobe_enabled=cc.adaptive_reprobe_enabled,
+            adaptive_reprobe_rows=cc.adaptive_reprobe_rows,
+            adaptive_reprobe_seconds=cc.adaptive_reprobe_seconds,
             enable_request_batching=cc.enable_request_batching,
             max_batch_size=cc.max_batch_size,
             max_wait_ms=cc.max_wait_ms,
@@ -254,6 +259,12 @@ class PipelineEngine:
                     "Min Concurrency": cc.min_concurrent,
                     "Target Latency": f"{cc.target_latency_ms}ms",
                     "Metrics Type": cc.metrics_type,
+                    "Reprobe": (
+                        f"{cc.adaptive_reprobe_rows} rows / "
+                        f"{cc.adaptive_reprobe_seconds:g}s"
+                        if cc.adaptive_reprobe_enabled
+                        else "disabled"
+                    ),
                 }
             )
         else:
@@ -300,6 +311,7 @@ class PipelineEngine:
         completed: int,
         errors: int,
         elapsed_ms: float,
+        interrupted: bool = False,
     ) -> RunReport:
         """RunReport を生成して返す。"""
         return RunReport(
@@ -307,6 +319,7 @@ class PipelineEngine:
             completed_rows=completed,
             error_rows=errors,
             elapsed_ms=elapsed_ms,
+            interrupted=interrupted,
         )
 
     # ------------------------------------------------------------------
@@ -331,6 +344,8 @@ class PipelineEngine:
         completed = 0
         errors = 0
         last_update = 0
+        self._last_completed_rows = 0
+        self._last_error_rows = 0
         rc = self._run_config
         io = rc.io
 
@@ -390,6 +405,9 @@ class PipelineEngine:
                         )
                         if profiler:
                             profiler.record_output(result.data)
+
+                    self._last_completed_rows = completed
+                    self._last_error_rows = errors
 
                     if progress and task_ref[0] is not None:
                         progress.update(task_ref[0], advance=1)
@@ -456,16 +474,43 @@ class PipelineEngine:
         profiler = self._init_profiler()
 
         start_time = time.time()
-        completed, errors = asyncio.run(
-            self._run_async(
-                dataset,
-                output_path,
-                processed_indices,
-                append_mode,
-                remaining,
-                profiler,
+        try:
+            completed, errors = asyncio.run(
+                self._run_async(
+                    dataset,
+                    output_path,
+                    processed_indices,
+                    append_mode,
+                    remaining,
+                    profiler,
+                )
             )
-        )
+        except KeyboardInterrupt:
+            elapsed_ms = (time.time() - start_time) * 1000
+            logger = get_logger()
+            if self._run_config.show_progress:
+                logger.warning(
+                    "Interrupted by user. Completed rows have been flushed; "
+                    "rerun with --resume to continue from the output file."
+                )
+                logger.print_stats(
+                    {
+                        "total": total_count
+                        if total_count is not None
+                        else self._last_completed_rows,
+                        "completed": self._last_completed_rows,
+                        "errors": self._last_error_rows,
+                    }
+                )
+            self._finalize_profiler(profiler, output_path)
+            return self._build_report(
+                total_count,
+                self._last_completed_rows,
+                self._last_error_rows,
+                elapsed_ms,
+                interrupted=True,
+            )
+
         elapsed_ms = (time.time() - start_time) * 1000
 
         self._finalize_profiler(profiler, output_path)

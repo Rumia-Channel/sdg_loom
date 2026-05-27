@@ -22,6 +22,9 @@ class ConcurrencyConfig(BaseModel):
     target_latency_ms: int = 3000
     target_queue_depth: int = 32
     metrics_type: str = "none"  # none | vllm | sglang
+    adaptive_reprobe_enabled: bool = True
+    adaptive_reprobe_rows: int = 32
+    adaptive_reprobe_seconds: float = 120.0
     enable_request_batching: bool = False
     max_batch_size: int = 32
     max_wait_ms: int = 50
@@ -32,8 +35,8 @@ class IOConfig(BaseModel):
 
     model_config = {"populate_by_name": True}
 
-    buffer_size: int = 100
-    flush_interval: float = 5.0
+    buffer_size: int = 1
+    flush_interval: float = 1.0
 
 
 class ResumeConfig(BaseModel):

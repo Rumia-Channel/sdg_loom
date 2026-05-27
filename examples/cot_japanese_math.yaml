@@ -20,6 +20,10 @@
 #   # 本番実行 (全55件)
 #   sdg run --yaml examples/cot_japanese_math.yaml --input examples/data/cot_japanese_math_seeds.jsonl --output japanese_math_cot.jsonl
 #
+#   # スケール用 seed 生成 (各レベル100件、通常問題70% + 補助シナリオ各10%)
+#   uv run python examples/scripts/generate_cot_japanese_math_scaled_seeds.py --items-per-level 100
+#   sdg run --yaml examples/cot_japanese_math.yaml --input examples/data/cot_japanese_math_scaled_seeds.jsonl --output japanese_math_cot_scaled.jsonl
+#
 #   # 大規模向け: 適応的並行性 + 共有トランスポート
 #   sdg run --yaml examples/cot_japanese_math.yaml --input examples/data/cot_japanese_math_seeds.jsonl --output japanese_math_cot.jsonl --adaptive --max-batch 32 --target-latency-ms 2000 --use-shared-transport
 #
@@ -87,6 +91,8 @@ blocks:
     system_prompt: |
       あなたは数学教材向けの文章題を作成する専門家です。
       与えられた seed をもとに、条件が明確で、答えが一意に定まる問題文を作成してください。
+      seed は完成済みの問題文ではなく、単元・難易度・典型場面を示す素材です。
+      同じ seed が複数回渡されても、対象物・数値・問う量・条件焦点を変え、別の問題として生成してください。
 
       # 最重要指示
       - すべての出力は日本語で記述すること
@@ -119,11 +125,15 @@ blocks:
       # 文章題作成の鉄則
       1. seed の場面をそのまま丸写しせず、自然な文章題として完成させる。
       2. 指定されたレベルの新規導入概念を問題の中心に置く。
-      3. 内部難易度1では新規導入概念だけで解ける問題にする。
+      3. 既習事項がない範囲では、新規導入概念だけで解ける問題にする。
       4. 内部難易度2以降では、前提知識が少なくとも1つ必要になるよう数値・条件を設計する。
       5. 問題文には「Level」「Step」「内部難易度」などのメタ情報を絶対に含めない。
       6. 数値は具体的かつ現実的にし、単位が必要な場合は必ず明示する。
       7. LaTeX 数式は $...$ で囲む。
+      8. seed と同じ数値・同じ対象物・同じ問い方を同時に使い回さない。
+      9. 問題タイプ・表層テーマ・条件焦点は、指定レベルで自然に扱える範囲に調整してよい。
+      10. 指定された許可知識だけで解ける問題にする。未導入の解法を使わないと自然に解けない問題は作らない。
+      11. 導入済みの概念で直接解ける問題を、未導入の上位概念で解く必要がある形にしない。
 
       # 出力形式（厳守）
       <problem>
@@ -147,18 +157,39 @@ blocks:
         【新規導入概念】 {new_concept}
         【既習事項】 {prerequisites}
         【単元・分野】 {topic}
-        【文章題の場面】 {scenario}
+        【seed の場面メモ】 {scenario}
+        【生成サンプルID】 {sample_id}
+        【同一レベル内の問題番号】 {level_item_index}
+        【問題タイプ】 {problem_archetype}
+        【表層テーマ】 {surface_theme}
+        【条件焦点】 {constraint_focus}
+        【想定誤答パターン】 {wrong_answer_pattern}
+        【多様化ヒント】 {variation_hint}
+        【数値設定方針】 {number_policy}
+        【使用してよい知識】 {allowed_methods}
+        【使ってはいけない知識】 {forbidden_methods}
+        【解法制約】 {method_policy}
+        【多様化の必須指示】 {diversity_instruction}
 
         【最重要の作成指示】
         この問題は内部難易度 {level} の評価に使います。
         新規導入概念（{new_concept}）が問題の中心になるようにしてください。
         既習事項が「なし」の場合は、既習事項を要求せず、新規導入概念だけで解ける問題にしてください。
         既習事項がある場合は、解答の途中で {prerequisites} の知識を少なくとも1つ自然に使う問題にしてください。
+        ただし、使用してよい知識は {allowed_methods} までです。
+        {forbidden_methods} は問題の自然な解法に必要にならないようにしてください。
+        使用してよい知識や使ってはいけない知識が空欄の場合は、上のレベル体系から推定してください。
+        特に、未導入の概念は、どの範囲でも近道として使わせないでください。
+        同じ seed から複数件を生成する場合でも、問題タイプ・表層テーマ・条件焦点・多様化ヒント・数値設定方針を使って、数値・条件・問う量・場面の焦点を変えてください。
+        想定誤答パターンは、解答者が間違えやすい条件を自然に埋め込むための参考です。問題文自体を曖昧にしてはいけません。
 
         具体的には:
         - 問題文の核心が {new_concept} であること
         - 条件が明確で、答えが一意に定まること
-        - seed の場面を活かしつつ、文章題として自然に読めること
+        - seed の場面は素材として扱い、丸写しせず、文章題として自然に読めること
+        - 既存の典型問題と同じ数値や同じ問い方に寄りすぎないこと
+        - 100件規模で同じレベルを生成しても、問題文がほぼ重複しないこと
+        - 解答者が未導入の強い道具を使わなくても、指定範囲の考え方で自然に解けること
 
         【文体】
         学年に応じて読みやすく、かつ数学的に正確な日本語を使用すること。
@@ -205,12 +236,21 @@ blocks:
       - 自信は「僕はすごいから正しい」ではなく、条件を読み、式にし、計算し、境界を確認した結果として出す。
       - 得意げな口調はしっかり残す。ただし、得意げさは相手を下げるためではなく、条件を見抜いて教えてあげられる余裕として出す。
 
+      # 知識境界の最重要制約
+      - 解法は、入力で指定された「使用してよい知識」の範囲だけで組み立てる。
+      - 入力で指定された「使ってはいけない知識」は、近道になっても使わない。
+      - 「使用してよい知識」や「使ってはいけない知識」が空欄の場合は、内部難易度のレベル体系から推定する。
+      - 未導入の強い道具で解くと、数学的には正しくてもデータとしては失敗である。
+      - 導入済みの概念で直接扱える問題を、未導入の上位概念へ持ち上げて解かない。
+      - 文字式・方程式・不等式・関数・微分・積分・行列・大学数学などは、それぞれ使用してよい知識に含まれる場合だけ使う。
+      - 説明量と使用知識を混同しない。簡単に説明するだけでなく、解法で使う道具そのものを知識境界に合わせる。
+
       # 数学推論におけるキャラの出し方
       キャラ性は口癖ではなく、次のような思考手順に出す。
       1. 条件を正確に読む。
-      2. 変数を置く。
-      3. 式を立てる。
-      4. 不等号・整数条件・単位を確認する。
+      2. 使用してよい知識の範囲で、数え方・計算方法・必要なら変数設定を選ぶ。
+      3. 導入済みの概念で直接扱えるなら、その範囲の計算・比較・式だけで解く。
+      4. その範囲で必要な等号・不等号・整数条件・単位を確認する。
       5. 計算する。
       6. 境界値を確認する。
       7. 必要なら、1つ上・1つ下の値を試す。
@@ -299,9 +339,10 @@ blocks:
         同じ口調のまま短く解く。簡単な問題でも一人称「僕」と得意げな導き方は保つ。
         例: 「僕なら、ここはそのまま足すね。」
       - 内部難易度4〜8:
-        同じ口調のまま、条件確認・整数条件・境界確認を少し増やす。
+        同じ口調のまま、許可された範囲で条件確認・整数条件・境界確認を少し増やす。
         例: 「僕なら、まず全体を同じ数ずつ分ける条件を見るね。」
-        例: 「ここで一度、何を $x$ と置いたか確認する。」
+        例: 「ここで一度、何を聞かれているか確認する。」
+        例: 「文字を使ってよい問題なら、ここで何を $x$ と置いたか確認する。」
         例: 「いや、その候補は条件に合わないよ。」
       - 内部難易度9〜14:
         同じ口調のまま、方針選択、式の整理、検算、境界確認を厚くする。
@@ -321,12 +362,30 @@ blocks:
       - ただし長い思考過程は繰り返さず、採点者が正しさを確認できる範囲に絞る。
       - 数値問題では、式、計算結果、単位、最終結論を含める。
       - 最大・最小・整数条件を含む問題では、採用した値が条件を満たすことと、1つ上または1つ下が条件に合わないことを短く示す。
-      - 方程式・関数・微積分では、主要な式変形と代入確認を含める。
+      - 方程式・関数・微積分が使用してよい知識に含まれる問題では、主要な式変形と代入確認を含める。
       - 証明問題では、結論を支える条件・定理・確認点を簡潔に含める。
       - 口調の維持は、正確さ・簡潔さと同じくらい重要である。
       - 解答欄でも、一人称「僕」や「〜だね」「〜だよ」「〜さ」「〜じゃないか」などの声を自然に残す。
       - ただし、フィラーや迷いは入れず、落ち着いた最終回答としてキャラクターを保つ。
       - 急に無人格な模範解答口調や「〜である」調へ切り替えない。
+
+      # 対話シナリオの切り替え
+      interaction_type に応じて、解答ログを次の形式に変える。
+      - direct_solution:
+        問題をそのまま解く。<learner_response> は「なし」とする。
+      - wrong_answer_correction:
+        学習者が間違った答えや考え方を出した状況にする。
+        <learner_response> には、想定誤答パターンを参考に、問題に対するもっともらしい誤答と短い誤った理由を書く。
+        <cot> では、まず明確に否定し、何が条件に合わないか、正しい式と計算、必要なら差分修正を示す。
+      - correct_answer_verification:
+        学習者が正しい答えを出した状況にする。
+        <learner_response> には、問題に対する正しい答えと短い理由を書く。
+        <cot> では、その答えが合っていることを認め、条件・計算・単位・境界を確認して確かめる。
+      - prerequisite_bridge_teaching:
+        学習者は一つ下の内部難易度までの概念しか理解していない。
+        <learner_response> には、学習者が分からない点や前提知識の不足を短く書く。
+        <cot> では、前の範囲の考え方から新しい概念へ橋をかけるように丁寧に説明する。
+      どのシナリオでも、答え欄は問いへの正しい最終回答として成立させる。
 
       # LaTeX記法の例
       インライン: $x^2 + y^2 = z^2$
@@ -341,6 +400,13 @@ blocks:
       場合分け: $\begin{cases} x^2 & (x \geq 0) \\ 0 & (x < 0) \end{cases}$
 
       # 出力形式（厳守）
+      <learner_response>
+      [対話シナリオ上の学習者の発言。
+       direct_solution の場合は「なし」。
+       wrong_answer_correction では誤答と短い誤った理由。
+       correct_answer_verification では正答と短い理由。
+       prerequisite_bridge_teaching では理解不足や質問。]
+      </learner_response>
       <cot>
       [自然な日本語の解答ログ。
        「Step」「Level」「内部難易度」「第1段階」のようなメタな見出しは使わない。
@@ -369,10 +435,25 @@ blocks:
         【新規導入概念】 {new_concept}
         【既習事項】 {prerequisites}
         【style_intensity】 {style_intensity}
+        【対話シナリオ】 {interaction_type}
+        【シナリオ名】 {interaction_label}
+        【学習者設定】 {learner_profile}
+        【シナリオ指示】 {interaction_instruction}
+        【問題タイプ】 {problem_archetype}
+        【条件焦点】 {constraint_focus}
+        【想定誤答パターン】 {wrong_answer_pattern}
+        【使用してよい知識】 {allowed_methods}
+        【使ってはいけない知識】 {forbidden_methods}
+        【解法制約】 {method_policy}
 
         【解答作成の注意】
         - 全編日本語、数式はLaTeX記法（$...$ または $$...$$）
         - 「Step」「Level」「内部難易度」などのメタ表現を解答本文や回答本文に絶対に出さない
+        - 解法は「使用してよい知識」の範囲だけで組み立てる
+        - 「使ってはいけない知識」に含まれる道具は、答えが合っていても使わない
+        - 使用知識の欄が空の場合は、内部難易度番号と既習事項から推定する
+        - 導入済みの演算・概念で直接解ける問題を、未導入の記号化や上位概念に変換して解かない
+        - 文字式・方程式・不等式・関数などは、使用してよい知識に明示されている場合だけ使う
         - 自然な段落ごとに、用いる数学的操作を自然に言及する
           例: 「割り算を用いて」「分数の通分により」「二次方程式の解の公式を適用して」
         - 一人称は「僕」。自信家だが、検算・条件確認を根拠にして自信を出す
@@ -380,6 +461,7 @@ blocks:
         - style_intensity に合わせて、キャラ性の強さを調整する。ただし内部難易度とは連動させない
         - 得意げな口調は残す。ただし、相手を下げず、条件を見せて教える形にする
         - 誤答や境界候補が間違っている場合は、まず明確に否定し、計算・条件違反・差分で理由を示す
+        - wrong_answer_correction では、想定誤答パターンを反映した学習者の誤答を作り、それを条件・計算・検算で訂正する
         - 最大・最小・整数条件を含む問題では、必要に応じて1つ上・1つ下の値を確認する
         - 内部難易度1〜3は短めに解くが、口調は他の範囲と同じにする
         - 内部難易度4以上では、口調を変えずに条件確認・検算・境界確認の量を増やす
@@ -392,8 +474,15 @@ blocks:
         - <answer> が急に無人格な模範解答口調や「〜である」調にならないようにする
         - <answer> には答えだけでなく、必要な計算・条件確認・検算・単位をできるだけ残す
         - 最大・最小問題の <answer> では、採用した値が条件を満たすことと、隣接値が条件に合わないことも短く示す
+        - <learner_response> はシナリオに合わせて必ず出力する
+        - wrong_answer_correction では、学習者の誤答を明確に否定したうえで教える
+        - correct_answer_verification では、学習者の正答が合っていることを確認し、検算で確かめる
+        - prerequisite_bridge_teaching では、一つ下の範囲から新しい概念へ丁寧につなげる
         - 最終的な答えには「答え:」または $\boxed{}$ を付ける
     outputs:
+      - name: LearnerResponse
+        select: tag
+        tag: learner_response
       - name: CoTSolution
         select: tag
         tag: cot
@@ -426,7 +515,26 @@ blocks:
           topic: str,
           scenario: str,
           style_intensity: str,
+          sample_id: str,
+          source_seed_index: str,
+          level_item_index: str,
+          variant_index: str,
+          interaction_type: str,
+          interaction_label: str,
+          interaction_instruction: str,
+          learner_profile: str,
+          variation_hint: str,
+          number_policy: str,
+          problem_archetype: str,
+          surface_theme: str,
+          constraint_focus: str,
+          wrong_answer_pattern: str,
+          diversity_instruction: str,
+          allowed_methods: str,
+          forbidden_methods: str,
+          method_policy: str,
           problem: str,
+          learner_response: str,
           cot_solution: str,
           answer: str,
           problem_topic: str,
@@ -435,8 +543,18 @@ blocks:
           """日本語の解答ログ出力の検証と整形"""
 
           problem = (problem or "").strip()
+          learner_response = (learner_response or "").strip()
           cot_solution = (cot_solution or "").strip()
           answer = (answer or "").strip()
+
+          interaction_type = (interaction_type or "direct_solution").strip()
+          interaction_label = (interaction_label or "通常解答").strip()
+          learner_profile = (learner_profile or "").strip()
+          allowed_methods = (allowed_methods or "").strip()
+          forbidden_methods = (forbidden_methods or "").strip()
+          method_policy = (method_policy or "").strip()
+          if not learner_response and interaction_type == "direct_solution":
+              learner_response = "なし"
 
           persona = "自信家な僕っ娘。知的で得意げ。相手を見下さず、条件と計算で誤りを教えて導く。"
           cognitive_style = {
@@ -451,7 +569,8 @@ blocks:
               ],
               "reasoning_bias": [
                   "条件を正確に読む",
-                  "変数を置いて式にする",
+                  "使用してよい知識の範囲で解法を選ぶ",
+                  "未導入の記号化や上位概念に持ち上げず、導入済みの範囲で説明する",
                   "不等号・整数条件・単位を確認する",
                   "境界値を確認する",
                   "1つ上・1つ下の値も必要なら試す",
@@ -606,6 +725,205 @@ blocks:
                   + ", ".join(used_neutral_answer_markers)
               )
 
+          if interaction_type != "direct_solution" and learner_response in {"", "なし"}:
+              warnings.append("対話シナリオ用の learner_response が不足しています")
+
+          combined_response = f"{learner_response}\n{cot_solution}\n{answer}"
+          if interaction_type == "wrong_answer_correction":
+              correction_markers = [
+                  "違う",
+                  "ではない",
+                  "ならない",
+                  "条件に合わない",
+                  "超えて",
+                  "見落と",
+              ]
+              if not any(marker in combined_response for marker in correction_markers):
+                  warnings.append("誤答訂正シナリオなのに、明確な否定や条件違反の指摘が弱いです")
+          elif interaction_type == "correct_answer_verification":
+              verification_markers = [
+                  "合って",
+                  "正しい",
+                  "確認",
+                  "検算",
+                  "確かめ",
+              ]
+              if not any(marker in combined_response for marker in verification_markers):
+                  warnings.append("正答確認シナリオなのに、合っていることの確認や検算が弱いです")
+          elif interaction_type == "prerequisite_bridge_teaching":
+              bridge_markers = [
+                  "前",
+                  "まず",
+                  "順番",
+                  "つな",
+                  "大丈夫",
+                  "考え方",
+                  "新しい",
+              ]
+              if not any(marker in combined_response for marker in bridge_markers):
+                  warnings.append("下位概念向け説明シナリオなのに、前提知識からの橋渡しが弱いです")
+
+          # --- 知識境界チェック ---
+          method_policy_warnings = []
+
+          def has_any(text, markers):
+              return [marker for marker in markers if marker in text]
+
+          def has_regex(text, patterns):
+              return [
+                  pattern
+                  for pattern in patterns
+                  if re.search(pattern, text)
+              ]
+
+          def inferred_forbidden_methods(level_value):
+              progression = [
+                  "一桁の加減、数の大小比較",
+                  "二桁以上の加減、繰り上がり・繰り下がり、筆算の考え方",
+                  "九九と乗法の意味",
+                  "割り算、等分除、包含除、余り",
+                  "小数の四則演算、位取り",
+                  "分数の四則演算、通分・約分",
+                  "文字式、一次方程式、正負の数",
+                  "連立方程式、不等式",
+                  "二次方程式、因数分解、平方根",
+                  "関数、一次関数、二次関数、三角比",
+                  "極限、微分係数、導関数、接線、増減表、極値",
+                  "不定積分、定積分、面積、体積",
+                  "行列、行列式、固有値、偏微分、重積分",
+                  "群論、複素解析、位相空間、関数解析",
+              ]
+              current = min(max(level_value, 1), len(progression))
+              return "、".join(progression[current:])
+
+          effective_forbidden_methods = (
+              forbidden_methods or inferred_forbidden_methods(level_num)
+          )
+
+          def concept_is_forbidden(concept_terms):
+              return any(
+                  term and term in effective_forbidden_methods
+                  for term in concept_terms
+              )
+
+          def add_method_warning(label, concept_terms, markers=None, patterns=None):
+              if not concept_is_forbidden(concept_terms):
+                  return
+              found = []
+              if markers:
+                  found.extend(has_any(combined_response, markers))
+              if patterns:
+                  found.extend(has_regex(combined_response, patterns))
+              if found:
+                  method_policy_warnings.append(
+                      f"未導入の解法が使われている可能性があります ({label}: "
+                      + ", ".join(found[:6])
+                      + ")"
+                  )
+
+          add_method_warning(
+              "乗法",
+              ["乗法", "九九"],
+              markers=["掛け算", "乗法", "かけ算", "倍", "\\times", "\\cdot", "×"],
+          )
+          add_method_warning(
+              "除法",
+              ["割り算", "等分除", "包含除", "余り"],
+              markers=["割り算", "除法", "わり算", "\\div", "÷", "商", "余り"],
+          )
+          add_method_warning(
+              "小数",
+              ["小数"],
+              markers=["小数"],
+              patterns=[r"\d+\.\d+"],
+          )
+          add_method_warning(
+              "分数",
+              ["分数", "通分", "約分"],
+              markers=["分数", "通分", "約分", "\\frac"],
+              patterns=[r"\d+\s*/\s*\d+"],
+          )
+          add_method_warning(
+              "文字式・一次方程式",
+              ["文字式", "一次方程式", "正負の数"],
+              markers=[
+                  "方程式",
+                  "文字式",
+                  "変数",
+                  "未知数",
+                  "移項",
+                  "両辺",
+                  "x と置",
+                  "xと置",
+                  "x を",
+                  "xを",
+                  "$x",
+                  "$y",
+                  "$z",
+                  "\\begin{cases}",
+              ],
+              patterns=[
+                  r"[$\s（(]x\s*=",
+                  r"[$\s（(]y\s*=",
+                  r"[$\s（(]z\s*=",
+              ],
+          )
+          add_method_warning(
+              "連立方程式・不等式",
+              ["連立方程式", "不等式"],
+              markers=["連立", "不等式", "\\leq", "\\geq"],
+          )
+          add_method_warning(
+              "二次方程式・平方根・因数分解",
+              ["二次方程式", "平方根", "因数分解"],
+              markers=["二次方程式", "平方根", "因数分解", "\\sqrt"],
+          )
+          add_method_warning(
+              "関数・三角比",
+              ["関数、", "一次関数", "二次関数", "三角比"],
+              markers=["一次関数", "二次関数", "関数", "三角比", "\\sin", "\\cos", "\\tan"],
+          )
+          add_method_warning(
+              "極限・微分",
+              ["極限", "微分係数", "導関数", "接線", "増減表", "極値"],
+              markers=["極限", "微分", "導関数", "接線", "増減表", "\\lim", "\\frac{d"],
+          )
+          add_method_warning(
+              "積分",
+              ["不定積分", "定積分", "面積", "体積"],
+              markers=["積分", "不定積分", "定積分", "\\int"],
+          )
+          add_method_warning(
+              "行列・偏微分・重積分",
+              ["行列", "行列式", "固有値", "偏微分", "重積分"],
+              markers=[
+                  "行列",
+                  "行列式",
+                  "固有値",
+                  "偏微分",
+                  "重積分",
+                  "\\partial",
+                  "\\begin{pmatrix}",
+              ],
+          )
+          add_method_warning(
+              "大学専門数学",
+              ["群論", "複素解析", "位相空間", "関数解析"],
+              markers=[
+                  "群論",
+                  "留数",
+                  "正則",
+                  "位相",
+                  "コンパクト",
+                  "ノルム",
+                  "バナッハ",
+                  "ヒルベルト",
+              ],
+          )
+
+          method_policy_valid = not method_policy_warnings
+          warnings.extend(method_policy_warnings)
+
           prohibited_expressions = [
               "ふふん、そこは僕がちゃんと見てるよ",
               "そこは見落とさないよ",
@@ -654,10 +972,29 @@ blocks:
 
           output = {
               "level": level_num,
+              "sample_id": sample_id or "",
+              "source_seed_index": source_seed_index or "",
+              "level_item_index": level_item_index or "",
+              "variant_index": variant_index or "",
               "grade": grade or "",
               "new_concept": new_concept or "",
               "prerequisites": prerequisites or "",
               "prerequisites_used": prereqs_used or "",
+              "interaction_type": interaction_type,
+              "interaction_label": interaction_label,
+              "interaction_instruction": interaction_instruction or "",
+              "learner_profile": learner_profile,
+              "learner_response": learner_response,
+              "variation_hint": variation_hint or "",
+              "number_policy": number_policy or "",
+              "problem_archetype": problem_archetype or "",
+              "surface_theme": surface_theme or "",
+              "constraint_focus": constraint_focus or "",
+              "wrong_answer_pattern": wrong_answer_pattern or "",
+              "diversity_instruction": diversity_instruction or "",
+              "allowed_methods": allowed_methods,
+              "forbidden_methods": forbidden_methods,
+              "method_policy": method_policy,
               "problem": problem,
               "cot_solution": cot_solution,
               "answer": answer,
@@ -675,6 +1012,8 @@ blocks:
               "answer_support_valid": has_answer_support,
               "answer_tone_valid": has_answer_tone,
               "meta_expression_valid": meta_expression_valid,
+              "method_policy_valid": method_policy_valid,
+              "method_policy_warnings": method_policy_warnings,
               "warnings": warnings,
               "warning_count": len(warnings),
           }
@@ -702,6 +1041,7 @@ blocks:
               "AnswerSupportValid": has_answer_support,
               "AnswerToneValid": has_answer_tone,
               "MetaExpressionValid": meta_expression_valid,
+              "MethodPolicyValid": method_policy_valid,
               "LatexDollarCount": inline_dollar,
               "LatexCommandCount": len(found_commands),
               "Warnings": warnings,
@@ -715,13 +1055,32 @@ blocks:
       topic: "{topic}"
       scenario: "{scenario}"
       style_intensity: "{style_intensity}"
+      sample_id: "{sample_id}"
+      source_seed_index: "{source_seed_index}"
+      level_item_index: "{level_item_index}"
+      variant_index: "{variant_index}"
+      interaction_type: "{interaction_type}"
+      interaction_label: "{interaction_label}"
+      interaction_instruction: "{interaction_instruction}"
+      learner_profile: "{learner_profile}"
+      variation_hint: "{variation_hint}"
+      number_policy: "{number_policy}"
+      problem_archetype: "{problem_archetype}"
+      surface_theme: "{surface_theme}"
+      constraint_focus: "{constraint_focus}"
+      wrong_answer_pattern: "{wrong_answer_pattern}"
+      diversity_instruction: "{diversity_instruction}"
+      allowed_methods: "{allowed_methods}"
+      forbidden_methods: "{forbidden_methods}"
+      method_policy: "{method_policy}"
       problem: "{Problem}"
+      learner_response: "{LearnerResponse}"
       cot_solution: "{CoTSolution}"
       answer: "{FinalAnswer}"
       problem_topic: "{ProblemTopic}"
       prereqs_used: "{PrerequisitesUsed}"
     outputs:
-      [OutputJSON, OutputData, Topic, Persona, StyleIntensity, CognitiveStyle, LatexValid, JapaneseValid, AnswerMarkerValid, AnswerSupportValid, AnswerToneValid, MetaExpressionValid, LatexDollarCount, LatexCommandCount, Warnings, WarningCount]
+      [OutputJSON, OutputData, Topic, Persona, StyleIntensity, CognitiveStyle, LatexValid, JapaneseValid, AnswerMarkerValid, AnswerSupportValid, AnswerToneValid, MetaExpressionValid, MethodPolicyValid, LatexDollarCount, LatexCommandCount, Warnings, WarningCount]
     ctx_access: ["vars.read", "log"]
 
   # ============================================================
@@ -742,6 +1101,42 @@ blocks:
         value: "{prerequisites}"
       - name: prerequisites_used
         value: "{PrerequisitesUsed}"
+      - name: sample_id
+        value: "{sample_id}"
+      - name: source_seed_index
+        value: "{source_seed_index}"
+      - name: level_item_index
+        value: "{level_item_index}"
+      - name: variant_index
+        value: "{variant_index}"
+      - name: interaction_type
+        value: "{interaction_type}"
+      - name: interaction_label
+        value: "{interaction_label}"
+      - name: learner_profile
+        value: "{learner_profile}"
+      - name: learner_response
+        value: "{LearnerResponse}"
+      - name: variation_hint
+        value: "{variation_hint}"
+      - name: number_policy
+        value: "{number_policy}"
+      - name: problem_archetype
+        value: "{problem_archetype}"
+      - name: surface_theme
+        value: "{surface_theme}"
+      - name: constraint_focus
+        value: "{constraint_focus}"
+      - name: wrong_answer_pattern
+        value: "{wrong_answer_pattern}"
+      - name: diversity_instruction
+        value: "{diversity_instruction}"
+      - name: allowed_methods
+        value: "{allowed_methods}"
+      - name: forbidden_methods
+        value: "{forbidden_methods}"
+      - name: method_policy
+        value: "{method_policy}"
       - name: problem
         value: "{Problem}"
       - name: cot_solution
@@ -770,6 +1165,8 @@ blocks:
         value: "{AnswerToneValid}"
       - name: meta_expression_valid
         value: "{MetaExpressionValid}"
+      - name: method_policy_valid
+        value: "{MethodPolicyValid}"
       - name: latex_dollar_count
         value: "{LatexDollarCount}"
       - name: latex_command_count

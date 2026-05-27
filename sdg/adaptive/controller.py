@@ -358,6 +358,10 @@ class AdaptiveController:
         vegas_beta: float = 15.0,  # Vegas upper threshold - 非常に寛容に
         mild_decrease_factor: float = 0.98,  # Decrease factor for latency spikes - ほぼ減少させない
         trend_sensitivity: float = 0.3,  # Threshold for trend detection - 非常に寛容に
+        # Re-probe maximum concurrency after backoff.
+        reprobe_enabled: bool = True,
+        reprobe_interval_rows: int = 32,
+        reprobe_interval_seconds: float = 120.0,
     ):
         """
         Initialize the adaptive controller.
@@ -381,6 +385,9 @@ class AdaptiveController:
             vegas_beta: Vegas upper congestion threshold (default: 4.0)
             mild_decrease_factor: Decrease factor for latency issues (default: 0.85)
             trend_sensitivity: Threshold for detecting latency trends (default: 0.1)
+            reprobe_enabled: Periodically retry max_concurrency after a backoff
+            reprobe_interval_rows: Completed samples before retrying max concurrency
+            reprobe_interval_seconds: Seconds before retrying max concurrency
         """
         self.min_concurrency = min_concurrency
         self.max_concurrency = max_concurrency
@@ -402,6 +409,9 @@ class AdaptiveController:
         self.vegas_beta = vegas_beta
         self.mild_decrease_factor = mild_decrease_factor
         self.trend_sensitivity = trend_sensitivity
+        self.reprobe_enabled = reprobe_enabled
+        self.reprobe_interval_rows = max(1, reprobe_interval_rows)
+        self.reprobe_interval_seconds = max(0.0, reprobe_interval_seconds)
 
         # State - Start with slow start from initial_concurrency or a reasonable default
         if initial_concurrency is not None:
@@ -433,6 +443,11 @@ class AdaptiveController:
         self._latency_window: Deque[LatencySample] = deque(maxlen=window_size)
         self._last_adjustment_time: float = 0.0
         self._last_metrics: Optional[BackendMetrics] = None
+        self._total_samples: int = 0
+        self._last_reprobe_sample: int = 0
+        self._last_reprobe_time: float = time.time()
+        self._last_backoff_sample: int = 0
+        self._last_backoff_time: float = self._last_reprobe_time
 
         # EMA state for smoothed latency
         self._ema_latency = EMAState()
@@ -592,6 +607,7 @@ class AdaptiveController:
             concurrency_at_time=self._current,
         )
         self._latency_window.append(sample)
+        self._total_samples += 1
 
         # Update EMA for non-error samples
         if not is_error:
@@ -651,6 +667,7 @@ class AdaptiveController:
             self._phase = ControlPhase.CONGESTION_AVOIDANCE
             self._update_semaphore(old_concurrency, new_concurrency)
             self._current = new_concurrency
+            self._mark_backoff(now)
             self._record_adjustment(action)
 
             # Reset consecutive good counter
@@ -680,6 +697,7 @@ class AdaptiveController:
             self._phase = ControlPhase.CONGESTION_AVOIDANCE
             self._update_semaphore(old_concurrency, new_concurrency)
             self._current = new_concurrency
+            self._mark_backoff(time.time())
             self._record_adjustment("force_decrease")
             self._consecutive_good = 0
             self._consecutive_bad += 1
@@ -715,12 +733,67 @@ class AdaptiveController:
         if now - self._last_adjustment_time < self.adjustment_interval:
             return
 
+        if self._should_reprobe(now):
+            self._last_adjustment_time = now
+            self._reprobe_max()
+            return
+
         # Need minimum samples for adjustment
         if len(self._latency_window) < 10:
             return
 
         self._last_adjustment_time = now
         self._adjust_concurrency()
+
+    def _should_reprobe(self, now: float) -> bool:
+        """Return True when it is time to retry the configured max concurrency."""
+        if not self.reprobe_enabled:
+            return False
+        if self._current >= self.max_concurrency:
+            return False
+        anchor_sample = max(self._last_reprobe_sample, self._last_backoff_sample)
+        anchor_time = max(self._last_reprobe_time, self._last_backoff_time)
+        samples_since = self._total_samples - anchor_sample
+        if samples_since <= 0:
+            return False
+        time_since = now - anchor_time
+        return (
+            samples_since >= self.reprobe_interval_rows
+            or time_since >= self.reprobe_interval_seconds
+        )
+
+    def _mark_backoff(self, now: float) -> None:
+        """Mark a decrease so re-probing waits for fresh progress."""
+        self._last_backoff_sample = self._total_samples
+        self._last_backoff_time = now
+
+    def _reprobe_max(self) -> None:
+        """
+        Retry max concurrency after previous backoff.
+
+        Old latency and error samples are intentionally cleared so stale
+        congestion does not immediately pin the controller at the lower value.
+        New samples after the probe will decrease the limit again if needed.
+        """
+        old_concurrency = self._current
+        new_concurrency = self.max_concurrency
+
+        self._latency_window.clear()
+        self._ema_latency = EMAState()
+        self._ema_p95 = EMAState()
+        self._congestion = CongestionState()
+        self._recent_errors = 0
+        self._consecutive_errors = 0
+        self._consecutive_good = 0
+        self._consecutive_bad = 0
+        self._ssthresh = self.max_concurrency
+        self._phase = ControlPhase.SLOW_START
+
+        self._update_semaphore(old_concurrency, new_concurrency)
+        self._current = new_concurrency
+        self._last_reprobe_sample = self._total_samples
+        self._last_reprobe_time = time.time()
+        self._record_adjustment("reprobe_max")
 
     def _calculate_percentile(self, values: List[float], percentile: int) -> float:
         """Calculate percentile of values."""
@@ -854,6 +927,8 @@ class AdaptiveController:
 
             self._update_semaphore(old_concurrency, new_concurrency)
             self._current = new_concurrency
+            if new_concurrency < old_concurrency:
+                self._mark_backoff(time.time())
             self._record_adjustment(action)
             return
 
@@ -943,6 +1018,8 @@ class AdaptiveController:
         if new_concurrency != old_concurrency:
             self._update_semaphore(old_concurrency, new_concurrency)
             self._current = new_concurrency
+            if new_concurrency < old_concurrency:
+                self._mark_backoff(time.time())
 
         self._record_adjustment(action)
 
@@ -984,6 +1061,10 @@ class AdaptiveController:
         """Get current controller statistics."""
         latencies = [s.latency_ms for s in self._latency_window if not s.is_error]
         errors = [s for s in self._latency_window if s.is_error]
+        reprobe_anchor_sample = max(
+            self._last_reprobe_sample,
+            self._last_backoff_sample,
+        )
 
         stats = {
             "current_concurrency": self._current,
@@ -1025,6 +1106,10 @@ class AdaptiveController:
             "vegas_congestion_signal": self._congestion.congestion_signal,
             "consecutive_good": self._consecutive_good,
             "consecutive_bad": self._consecutive_bad,
+            "reprobe_enabled": self.reprobe_enabled,
+            "reprobe_interval_rows": self.reprobe_interval_rows,
+            "reprobe_interval_seconds": self.reprobe_interval_seconds,
+            "samples_since_reprobe": self._total_samples - reprobe_anchor_sample,
         }
 
         # Add recent adjustments
@@ -1047,6 +1132,11 @@ class AdaptiveController:
         self._latency_window.clear()
         self._last_adjustment_time = 0.0
         self._last_metrics = None
+        self._total_samples = 0
+        self._last_reprobe_sample = 0
+        self._last_reprobe_time = time.time()
+        self._last_backoff_sample = 0
+        self._last_backoff_time = self._last_reprobe_time
 
         # Reset EMA states
         self._ema_latency = EMAState()

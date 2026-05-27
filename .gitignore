@@ -79,6 +79,7 @@ cover/
 dmypy.json
 .pytype/
 .pyre/
+.pyrightcache/
 .ruff_cache/
 .pylint.d/
 
@@ -114,6 +115,8 @@ ipython_config.py
 .env.test
 .env.production
 .env.development
+!.env.example
+!.env.template
 
 # Logs
 *.log
@@ -148,8 +151,11 @@ memo.md
 
 # Caches
 .cache/
+.uv-cache/
 .out/
 output/
+outputs/
+results/
 flows/
 flow/
 

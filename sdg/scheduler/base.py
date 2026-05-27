@@ -30,6 +30,9 @@ class SchedulerConfig:
     target_latency_ms: int = 3000
     target_queue_depth: int = 32
     metrics_type: str = "none"  # "none" | "vllm" | "sglang"
+    adaptive_reprobe_enabled: bool = True
+    adaptive_reprobe_rows: int = 32
+    adaptive_reprobe_seconds: float = 120.0
 
     # ── リクエストバッチング ────────────────────────
     enable_request_batching: bool = False

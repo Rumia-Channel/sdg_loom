@@ -28,6 +28,7 @@ class RunReport:
     completed_rows: int = 0
     error_rows: int = 0
     elapsed_ms: float = 0.0
+    interrupted: bool = False
 
     @property
     def success_rate(self) -> float:

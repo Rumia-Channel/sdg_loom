@@ -71,6 +71,11 @@ Hugging Face データセットオプション:
                           目標P95レイテンシ（ミリ秒、デフォルト: 3000）
   --target-queue-depth TARGET_QUEUE_DEPTH
                           目標バックエンドキュー深度（デフォルト: 32）
+  --adaptive-reprobe-rows ADAPTIVE_REPROBE_ROWS
+                          並行数低下後に最大並行数を再試行する処理済み行数（デフォルト: 32）
+  --adaptive-reprobe-seconds ADAPTIVE_REPROBE_SECONDS
+                          並行数低下後に最大並行数を再試行する秒数（デフォルト: 120）
+  --no-adaptive-reprobe   並行数低下後の最大並行数再試行を無効化
 
 バックエンドメトリクスオプション（適応的制御時）:
   --use-vllm-metrics      vLLMのPrometheusメトリクスを使用して並行性を最適化
@@ -227,6 +232,11 @@ SDG (Scalable Data Generator) CLI [レガシーモード: sdg --yaml ...]
                         目標P95レイテンシ（ミリ秒、デフォルト: 3000）
   --target-queue-depth TARGET_QUEUE_DEPTH
                         目標バックエンドキュー深度（デフォルト: 32）
+  --adaptive-reprobe-rows ADAPTIVE_REPROBE_ROWS
+                        並行数低下後に最大並行数を再試行する処理済み行数（デフォルト: 32）
+  --adaptive-reprobe-seconds ADAPTIVE_REPROBE_SECONDS
+                        並行数低下後に最大並行数を再試行する秒数（デフォルト: 120）
+  --no-adaptive-reprobe 並行数低下後の最大並行数再試行を無効化
   --use-vllm-metrics    vLLMのメトリクスを使用
   --use-sglang-metrics  SGLangのメトリクスを使用
   --enable-request-batching
@@ -367,6 +377,23 @@ def build_run_parser(p: argparse.ArgumentParser) -> argparse.ArgumentParser:
         type=int,
         default=32,
         help="Target backend queue depth (default: 32)",
+    )
+    p.add_argument(
+        "--adaptive-reprobe-rows",
+        type=int,
+        default=32,
+        help="Completed rows before adaptive mode retries --max-batch after backoff (default: 32)",
+    )
+    p.add_argument(
+        "--adaptive-reprobe-seconds",
+        type=float,
+        default=120.0,
+        help="Seconds before adaptive mode retries --max-batch after backoff (default: 120)",
+    )
+    p.add_argument(
+        "--no-adaptive-reprobe",
+        action="store_true",
+        help="Disable periodic max-batch retry in adaptive mode",
     )
 
     # Backend metrics options (for adaptive mode)
@@ -667,6 +694,11 @@ def _build_run_config(args) -> "RunConfig":
             target_latency_ms=getattr(args, "target_latency_ms", 3000),
             target_queue_depth=getattr(args, "target_queue_depth", 32),
             metrics_type=metrics_type,
+            adaptive_reprobe_enabled=not getattr(
+                args, "no_adaptive_reprobe", False
+            ),
+            adaptive_reprobe_rows=getattr(args, "adaptive_reprobe_rows", 32),
+            adaptive_reprobe_seconds=getattr(args, "adaptive_reprobe_seconds", 120.0),
             enable_request_batching=getattr(args, "enable_request_batching", False),
             max_batch_size=getattr(args, "max_batch_size", 32),
             max_wait_ms=getattr(args, "max_wait_ms", 50),
@@ -747,6 +779,12 @@ def _execute_run(args):
     if args.resume and args.skip_lines > 0:
         logger.error("Cannot use both --resume and --skip at the same time.")
         sys.exit(1)
+    if getattr(args, "adaptive_reprobe_rows", 1) <= 0:
+        logger.error("--adaptive-reprobe-rows must be a positive integer.")
+        sys.exit(1)
+    if getattr(args, "adaptive_reprobe_seconds", 0.0) < 0:
+        logger.error("--adaptive-reprobe-seconds must be non-negative.")
+        sys.exit(1)
 
     # Legacy batch mode (backward compatibility のため維持)
     if getattr(args, "batch_mode", False):
@@ -777,7 +815,9 @@ def _execute_run(args):
         cfg = load_config(args.yaml)
         run_config = _build_run_config(args)
         engine = PipelineEngine(cfg, run_config)
-        engine.run(args.output)
+        report = engine.run(args.output)
+        if getattr(report, "interrupted", False):
+            sys.exit(130)
     except Exception as e:
         logger.error(f"Pipeline execution failed: {e}")
         sys.exit(1)

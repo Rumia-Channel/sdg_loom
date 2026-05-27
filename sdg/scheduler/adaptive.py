@@ -30,6 +30,9 @@ class AdaptiveScheduler:
         self._target_latency_ms = config.target_latency_ms
         self._target_queue_depth = config.target_queue_depth
         self._metrics_type = config.metrics_type
+        self._reprobe_enabled = config.adaptive_reprobe_enabled
+        self._reprobe_rows = config.adaptive_reprobe_rows
+        self._reprobe_seconds = config.adaptive_reprobe_seconds
         self._enable_request_batching = config.enable_request_batching
         self._max_batch_size = config.max_batch_size
         self._max_wait_ms = config.max_wait_ms
@@ -114,6 +117,9 @@ class AdaptiveScheduler:
             target_latency_ms=float(self._target_latency_ms),
             target_queue_depth=self._target_queue_depth,
             initial_concurrency=self._max_concurrent,
+            reprobe_enabled=self._reprobe_enabled,
+            reprobe_interval_rows=self._reprobe_rows,
+            reprobe_interval_seconds=self._reprobe_seconds,
         )
         self._controller = controller
 
