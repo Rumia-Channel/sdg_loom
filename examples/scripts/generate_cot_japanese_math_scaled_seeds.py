@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
-"""Generate scaled Japanese math persona seed JSONL.
+"""Generate scaled Japanese math seed JSONL.
 
 This expands the compact hand-written seed file into many generation records.
 Each output record is still only a seed: the actual problem, learner response,
-solution trace, and final answer are produced by examples/cot_japanese_math.yaml.
+solution trace, and final answer are produced by a YAML pipeline.
+Use examples/cot_japanese_math.yaml for the neutral version and
+examples/cot_japanese_math_boku.yaml for the character roleplay version.
 
 Default output:
   14 levels * 100 records per level = 1400 records
@@ -649,7 +651,7 @@ def print_summary(rows: list[dict]) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Generate scaled Japanese math persona seed JSONL."
+        description="Generate scaled Japanese math seed JSONL."
     )
     parser.add_argument("--source", type=Path, default=DEFAULT_SOURCE)
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
