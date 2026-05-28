@@ -259,12 +259,12 @@ budgets:
 
 ### 使用モデル
 
-このエージェントは単一のモデル（qwen3）のみを使用し、プロンプトの指示によって推論エフォートを制御します。
+このエージェントはDeepSeek APIを使用し、thinking modeによって推論エフォートを制御します。
 
 ```yaml
 models:
-  - name: qwen3
-    api_model: qwen3
+  - name: deepseek
+    api_model: deepseek-v4-pro
     api_key: "sk-local"
     base_url: http://localhost:8000/v1
 ```

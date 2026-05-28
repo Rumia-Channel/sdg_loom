@@ -33,7 +33,7 @@ runtime:          # 実行時環境（v2 で新設/拡張）
       - "httpx>=0.27"
     allow_network: false                  # 既定は外部ネットワーク遮断
     env:                                  # 環境変数（必要なら）
-      OPENAI_API_KEY: ${ENV.OPENAI_API_KEY}
+      DEEPSEEK_API_KEY: ${ENV.DEEPSEEK_API_KEY}
     setup:                                # 任意のセットアップフック
       pre_install: []
       post_install: []
@@ -52,9 +52,9 @@ budgets:          # グローバル予算（安全停止・制限）
 
 models:           # AIモデル定義の配列（v1 継承／完全定義）
   - name: "planner"                   # ブロックから参照する識別名
-    api_model: "gpt-4o-mini"          # API 上のモデル名
-    api_key: ${ENV.OPENAI_API_KEY}
-    base_url: "https://api.openai.com/v1"  # 任意
+    api_model: "deepseek-v4-flash"          # API 上のモデル名
+    api_key: ${ENV.DEEPSEEK_API_KEY}
+    base_url: "https://api.deepseek.com"  # 任意
     organization: null                     # 任意（プロバイダー固有）
     headers: {}                            # 任意の追加 HTTP ヘッダ
     request_defaults:                      # 呼び出し既定値
@@ -152,9 +152,9 @@ connections: []   # 明示配線（任意、§8）
 | フィールド | 必須 | 型/例 | 説明 |
 |---|:--:|---|---|
 | `name` | ✓ | `"planner"` | ブロックから参照するモデル識別子 |
-| `api_model` | ✓ | `"gpt-4o-mini"` | 実際の API 上モデル名 |
-| `api_key` | ✓ | `${ENV.OPENAI_API_KEY}` | 認証キー |
-| `base_url` |  | `"https://api.openai.com/v1"` | エンドポイント |
+| `api_model` | ✓ | `"deepseek-v4-flash"` | 実際の API 上モデル名 |
+| `api_key` | ✓ | `${ENV.DEEPSEEK_API_KEY}` | 認証キー |
+| `base_url` |  | `"https://api.deepseek.com"` | エンドポイント |
 | `organization` |  | `string` | 任意の組織 ID |
 | `headers` |  | `object` | 追加ヘッダ（`{"User-Agent":"Mabel"}` など） |
 | `request_defaults` |  | `object` | `temperature`, `top_p`, `max_tokens`, `timeout_sec`, `retry` 等 |
@@ -207,8 +207,8 @@ images:
 
 models:
   - name: vision
-    api_model: "gpt-4o"
-    api_key: "${ENV.OPENAI_API_KEY}"
+    api_model: "deepseek-v4-pro"
+    api_key: "${ENV.DEEPSEEK_API_KEY}"
     capabilities: ["vision"]
 
 blocks:
@@ -760,12 +760,14 @@ mabel:
   version: "2.0"
 models:
   - name: questioner
-    api_model: gpt-4o-mini
-    api_key: ${ENV.OPENAI_API_KEY}
-    request_defaults: { temperature: 0.2, max_tokens: 300 }
-  - name: responder
-    api_model: gpt-4.1
-    api_key: ${ENV.OPENAI_API_KEY}
+    api_model: deepseek-v4-flash
+    api_key: ${ENV.DEEPSEEK_API_KEY}
+    request_defaults:
+      temperature: 0.3
+      max_tokens: 1024
+  - name: reasoning
+    api_model: deepseek-v4-pro
+    api_key: ${ENV.DEEPSEEK_API_KEY}
     request_defaults: { temperature: 0.5, max_tokens: 800 }
 blocks:
   - type: ai
@@ -939,8 +941,8 @@ runtime:
     venv: ".venv"
 models:
   - name: planner
-    api_model: gpt-4o-mini
-    api_key: ${ENV.OPENAI_API_KEY}
+    api_model: deepseek-v4-pro
+    api_key: ${ENV.DEEPSEEK_API_KEY}
     request_defaults: { temperature: 0.0, max_tokens: 400 }
 globals:
   vars: { done: false, iteration: 0, plan: "" }

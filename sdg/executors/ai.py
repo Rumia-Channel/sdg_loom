@@ -62,7 +62,7 @@ def _build_clients(cfg: SDGConfig) -> Dict[str, LLMClient]:
             m.base_url,
             model_name=m.name,
             field="base_url",
-        ) or "https://api.openai.com"
+        ) or "https://api.deepseek.com"
         timeout = (m.request_defaults or {}).get("timeout_sec")
         clients[m.name] = LLMClient(
             base_url=base_url,
@@ -231,65 +231,23 @@ async def _execute_ai_block_single(
     if block.mode == "json":
         req_params["response_format"] = {"type": "json_object"}
 
-    # v2: Reasoningモード
-    # OpenRouter: reasoning.enabled, reasoning.effort, reasoning.exclude, reasoning.max_tokens
-    # OpenAI: reasoning_effort (o1/o3/GPT-5系)
-    # デフォルトはFalseで、modelsブロックで明示的に有効化する必要がある
+    # v2: Reasoningモード (DeepSeek thinking mode)
+    # DeepSeek は extra_body={"thinking": {"type": "enabled"}} でthinking modeを有効化
+    # reasoning_effort パラメータで思考の深さを制御 (high/max)
+    # レスポンスは reasoning_content フィールドに思考プロセスが返る
     if model_def.enable_reasoning:
-        # base_urlでプロバイダーを判定
-        is_openrouter = "openrouter.ai" in (model_def.base_url or "").lower()
-        is_openai = not model_def.base_url or "api.openai.com" in (
-            model_def.base_url or ""
-        ).lower()
-
-        if is_openrouter:
-            # OpenRouter形式: extra_body.reasoning オブジェクト
-            if "extra_body" not in req_params:
-                req_params["extra_body"] = {}
-
-            reasoning_config = {"enabled": True}
-
-            # Reasoning effort レベル設定
-            if model_def.reasoning_effort:
-                reasoning_config["effort"] = model_def.reasoning_effort
-
-            # Reasoning最大トークン数
-            if model_def.reasoning_max_tokens:
-                reasoning_config["max_tokens"] = model_def.reasoning_max_tokens
-
-            # レスポンスにReasoningを含めない場合（内部利用のみ）
-            if model_def.exclude_reasoning:
-                reasoning_config["exclude"] = True
-
-            req_params["extra_body"]["reasoning"] = reasoning_config
-
-        elif is_openai:
-            # OpenAI形式: reasoning_effortをトップレベルに設定（o1/o3/GPT-5系）
-            if model_def.reasoning_effort:
-                req_params["reasoning_effort"] = model_def.reasoning_effort
-        else:
-            # その他のプロバイダー: OpenRouter形式を試行
-            if "extra_body" not in req_params:
-                req_params["extra_body"] = {}
-
-            reasoning_config = {"enabled": True}
-
-            if model_def.reasoning_effort:
-                reasoning_config["effort"] = model_def.reasoning_effort
-
-            if model_def.reasoning_max_tokens:
-                reasoning_config["max_tokens"] = model_def.reasoning_max_tokens
-
-            if model_def.exclude_reasoning:
-                reasoning_config["exclude"] = True
-
-            req_params["extra_body"]["reasoning"] = reasoning_config
-
-    # OpenRouter プロバイダールーティング設定
-    if model_def.provider:
+        # DeepSeek thinking mode: extra_bodyにthinking設定
         if "extra_body" not in req_params:
             req_params["extra_body"] = {}
-        req_params["extra_body"]["provider"] = model_def.provider
+
+        thinking_config = {"type": "enabled"}
+        req_params["extra_body"]["thinking"] = thinking_config
+
+        # reasoning_effort: 思考深度の制御
+        if model_def.reasoning_effort:
+            req_params["reasoning_effort"] = model_def.reasoning_effort
+
+        # thinking modeではtemperature等は無効（設定しても無視される）
 
     # 単一チャット呼び出し
     retry_cfg = dict(req_params.get("retry") or {})
@@ -313,6 +271,8 @@ async def _execute_ai_block_single(
             completion_tokens=result.completion_tokens,
             latency_ms=result.latency_ms,
             error=result.error is not None,
+            cache_hit_tokens=result.cache_hit_tokens,
+            cache_miss_tokens=result.cache_miss_tokens,
         )
 
     if result.error:
@@ -323,10 +283,8 @@ async def _execute_ai_block_single(
 
     if model_def.enable_reasoning and result.reasoning:
         if not text.strip():
-            # contentが空でreasoningに内容がある場合:
-            # OpenRouter等で非reasoningモデルにreasoning機能を使用した際、
-            # モデルの出力全体がreasoningフィールドに入ることがある。
-            # この場合、reasoningの内容をcontentとして使用する。
+            # DeepSeek thinking mode: contentが空でreasoning_contentに内容がある場合、
+            # 思考プロセス全体を出力として使用する
             text = result.reasoning
         elif model_def.include_reasoning and not model_def.exclude_reasoning:
             # contentにも内容があり、reasoningを含める設定の場合は

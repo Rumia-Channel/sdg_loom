@@ -417,7 +417,7 @@ sdg run --yaml flows/yaml/your_flow.yaml \
 blocks:
   - type: ai
     exec: 1
-    model: gpt4
+    model: deepseek
     prompts: ["..."]
     on_error: "retry"  # Retry on error
     retry:
@@ -502,11 +502,11 @@ Error: Missing API key
 **Solution:**
 ```bash
 # Set environment variable
-export OPENAI_API_KEY="your-api-key-here"
+export DEEPSEEK_API_KEY="your-api-key-here"
 
 # Or specify directly in YAML (not recommended)
 models:
-  - name: gpt4
+  - name: deepseek
     api_key: "sk-..."  # Use environment variables in production
 ```
 

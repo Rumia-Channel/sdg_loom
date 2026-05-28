@@ -19,12 +19,11 @@ mabel:
     三次元スケーリング（推論時間×モデル性能×並列数）を活用した高度な推論システム。
     質問の難易度・特性を分析し、最適なリソース配分で回答を生成します。
 
-# モデル設定（qwen3のみ使用）
+# DeepSeekモデル設定
 models:
-  - name: qwen3
-    api_model: qwen3
-    api_key: "sk-local"
-    base_url: http://localhost:8000/v1
+  - name: deepseek
+    api_model: deepseek-v4-pro
+    api_key: "${ENV.DEEPSEEK_API_KEY}"
     request_defaults:
       temperature: 0.7
       max_tokens: 13000
@@ -121,7 +120,7 @@ blocks:
     exec: 10
     id: analyze_question
     name: "Step 1: Analyze Question Difficulty and Characteristics"
-    model: qwen3
+    model: deepseek
     system_prompt: |
       # 役割
       あなたは質問分析の専門家です。与えられた質問の難易度と特性を分析し、
@@ -203,7 +202,7 @@ blocks:
     exec: 20
     id: generate_perspectives
     name: "Step 2: Generate Perspectives and Prompts"
-    model: qwen3
+    model: deepseek
     system_prompt: |
       # 役割
       あなたはプロンプト設計の専門家です。質問の本質を理解し、効果的な視点とプロンプトを生成します。
@@ -305,7 +304,7 @@ blocks:
     name: "Step 3-1: Parallel Inference from Perspective 1"
     run_if:
       gte: ["{ActualParallelCount}", 1]
-    model: qwen3
+    model: deepseek
     system_prompt: |
       # 役割
       あなたは特定の視点から質問に回答する専門家です。
@@ -345,7 +344,7 @@ blocks:
     name: "Step 3-2: Parallel Inference from Perspective 2"
     run_if:
       gte: ["{ActualParallelCount}", 2]
-    model: qwen3
+    model: deepseek
     system_prompt: |
       # 役割
       あなたは特定の視点から質問に回答する専門家です。
@@ -385,7 +384,7 @@ blocks:
     name: "Step 3-3: Parallel Inference from Perspective 3"
     run_if:
       gte: ["{ActualParallelCount}", 3]
-    model: qwen3
+    model: deepseek
     system_prompt: |
       # 役割
       あなたは特定の視点から質問に回答する専門家です。
@@ -425,7 +424,7 @@ blocks:
     name: "Step 3-4: Parallel Inference from Perspective 4"
     run_if:
       gte: ["{ActualParallelCount}", 4]
-    model: qwen3
+    model: deepseek
     system_prompt: |
       # 役割
       あなたは特定の視点から質問に回答する専門家です。
@@ -465,7 +464,7 @@ blocks:
     name: "Step 3-5: Parallel Inference from Perspective 5"
     run_if:
       gte: ["{ActualParallelCount}", 5]
-    model: qwen3
+    model: deepseek
     system_prompt: |
       # 役割
       あなたは特定の視点から質問に回答する専門家です。
@@ -505,7 +504,7 @@ blocks:
     name: "Step 3-6: Parallel Inference from Perspective 6"
     run_if:
       gte: ["{ActualParallelCount}", 6]
-    model: qwen3
+    model: deepseek
     system_prompt: |
       # 役割
       あなたは特定の視点から質問に回答する専門家です。
@@ -545,7 +544,7 @@ blocks:
     name: "Step 3-7: Parallel Inference from Perspective 7"
     run_if:
       gte: ["{ActualParallelCount}", 7]
-    model: qwen3
+    model: deepseek
     system_prompt: |
       # 役割
       あなたは特定の視点から質問に回答する専門家です。
@@ -585,7 +584,7 @@ blocks:
     name: "Step 3-8: Parallel Inference from Perspective 8"
     run_if:
       gte: ["{ActualParallelCount}", 8]
-    model: qwen3
+    model: deepseek
     system_prompt: |
       # 役割
       あなたは特定の視点から質問に回答する専門家です。
@@ -625,7 +624,7 @@ blocks:
     name: "Step 3-9: Parallel Inference from Perspective 9"
     run_if:
       gte: ["{ActualParallelCount}", 9]
-    model: qwen3
+    model: deepseek
     system_prompt: |
       # 役割
       あなたは特定の視点から質問に回答する専門家です。
@@ -665,7 +664,7 @@ blocks:
     name: "Step 3-10: Parallel Inference from Perspective 10"
     run_if:
       gte: ["{ActualParallelCount}", 10]
-    model: qwen3
+    model: deepseek
     system_prompt: |
       # 役割
       あなたは特定の視点から質問に回答する専門家です。
@@ -728,7 +727,7 @@ blocks:
     exec: 51
     id: integrate_and_evaluate
     name: "Step 4b: Integrate Answers and Evaluate Quality"
-    model: qwen3
+    model: deepseek
     system_prompt: |
       # 役割
       あなたは複数の回答を統合し、品質を評価する専門家です。
@@ -859,7 +858,7 @@ blocks:
     name: "Step 4f: Additional Inference for Missing Aspects"
     run_if:
       equals: ["{LoopDecision}", "continue"]
-    model: qwen3
+    model: deepseek
     system_prompt: |
       # 役割
       あなたは不足部分を補完する専門家です。
@@ -909,7 +908,7 @@ blocks:
     name: "Step 4g: Merge Supplementary Answer"
     run_if:
       equals: ["{LoopDecision}", "continue"]
-    model: qwen3
+    model: deepseek
     system_prompt: |
       # 役割
       あなたは回答を統合する専門家です。
@@ -949,7 +948,7 @@ blocks:
     exec: 60
     id: synthesize_answer
     name: "Step 5: Synthesize Final Answer"
-    model: qwen3
+    model: deepseek
     system_prompt: |
       # 役割
       あなたは複数の推論サイクルから得られた回答を総合する専門家です。
@@ -1009,7 +1008,7 @@ blocks:
     exec: 70
     id: proofread_answer
     name: "Step 6: Proofread and Finalize Answer"
-    model: qwen3
+    model: deepseek
     system_prompt: |
       # 役割
       あなたは回答の品質保証を担当する校正者です。

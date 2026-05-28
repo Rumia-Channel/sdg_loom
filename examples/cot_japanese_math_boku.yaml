@@ -9,14 +9,14 @@
 #   GRPOでLevel 1から順に学習することで、破綻なく段階的に数学能力を獲得できる。
 #   文体は全レベルで一貫して理論的・数学的な正式な日本語を用いる。
 #
-# モデル指定: 環境変数で実行時に指定
-#   SDG_API_MODEL : モデル名 (例: qwen3, gpt-4o)
-#   SDG_API_KEY   : APIキー
-#   SDG_BASE_URL  : プロバイダURL (例: http://localhost:8000/v1)
+# モデル指定: 環境変数で実行時に指定（DeepSeek推奨）
+#   SDG_API_MODEL=deepseek-v4-pro
+#   SDG_API_KEY=sk-your-deepseek-key
+#   SDG_BASE_URL=https://api.deepseek.com
 #
 # 実行例:
 #   # テスト実行 (1件)
-#   $env:SDG_API_MODEL="qwen3"; $env:SDG_API_KEY="sk-local"; $env:SDG_BASE_URL="http://localhost:8000/v1"
+#   $env:SDG_API_MODEL="deepseek-v4-pro"; $env:SDG_API_KEY="sk-..."; $env:SDG_BASE_URL="https://api.deepseek.com"
 #   sdg test-run --yaml examples/cot_japanese_math_boku.yaml --input examples/data/cot_japanese_math_seeds.jsonl
 #
 #   # 本番実行 (全55件)
@@ -30,7 +30,7 @@
 #   sdg run --yaml examples/cot_japanese_math_boku.yaml --input examples/data/cot_japanese_math_scaled_seeds.jsonl --output japanese_math_cot_boku.jsonl --adaptive --max-batch 8 --target-latency-ms 2000 --use-shared-transport --resume
 #
 # bash/Linux の場合:
-#   export SDG_API_MODEL="qwen3" SDG_API_KEY="sk-local" SDG_BASE_URL="http://localhost:8000/v1"
+#   export SDG_API_MODEL="deepseek-v4-pro" SDG_API_KEY="sk-..." SDG_BASE_URL="https://api.deepseek.com"
 #   sdg test-run --yaml examples/cot_japanese_math_boku.yaml --input examples/data/cot_japanese_math_seeds.jsonl
 
 mabel:

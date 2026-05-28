@@ -141,7 +141,7 @@ class FunctionDef(BaseModel):
 
 
 class ModelConfig(BaseModel):
-    """モデル定義（api_key の ${ENV.NAME} 解決を含む）"""
+    """モデル定義（DeepSeek API設定、api_key の ${ENV.NAME} 解決を含む）"""
 
     model_config = {"populate_by_name": True}
 
@@ -154,14 +154,14 @@ class ModelConfig(BaseModel):
     request_defaults: Dict[str, Any] = Field(default_factory=dict)
     capabilities: List[str] = Field(default_factory=list)
     safety: Dict[str, Any] = Field(default_factory=dict)
-    # Reasoning 関連
+    # DeepSeek Reasoning (thinking mode) 設定
     enable_reasoning: bool = False
-    reasoning_effort: Optional[str] = None
+    reasoning_effort: Optional[str] = None  # "high" または "max"
     reasoning_max_tokens: Optional[int] = None
     include_reasoning: bool = True
     exclude_reasoning: bool = False
-    # OpenRouter プロバイダールーティング設定
-    provider: Optional[Dict[str, Any]] = None
+    # DeepSeek Chat Prefix Completion (Beta)
+    use_beta_endpoint: bool = False  # base_urlを /beta に切り替え
 
     @field_validator("api_model", "api_key", "base_url", "organization", mode="before")
     @classmethod
@@ -169,7 +169,7 @@ class ModelConfig(BaseModel):
         """${ENV.NAME} 形式の環境変数参照を解決する"""
         return _resolve_env_ref(v)
 
-    @field_validator("headers", "request_defaults", "provider", mode="before")
+    @field_validator("headers", "request_defaults", mode="before")
     @classmethod
     def resolve_env_mapping_fields(cls, v: Any) -> Any:
         """辞書・配列内の ${ENV.NAME} 形式も環境変数参照として解決する"""

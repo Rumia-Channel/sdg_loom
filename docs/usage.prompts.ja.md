@@ -416,7 +416,7 @@ sdg run --yaml flows/yaml/your_flow.yaml \
 blocks:
   - type: ai
     exec: 1
-    model: gpt4
+    model: deepseek
     prompts: ["..."]
     on_error: "retry"  # エラー時は再試行
     retry:
@@ -501,11 +501,11 @@ Error: Missing API key
 **解決方法:**
 ```bash
 # 環境変数を設定
-export OPENAI_API_KEY="your-api-key-here"
+export DEEPSEEK_API_KEY="your-api-key-here"
 
 # またはYAMLで直接指定（非推奨）
 models:
-  - name: gpt4
+  - name: deepseek
     api_key: "sk-..."  # 本番環境では環境変数を使用すること
 ```
 

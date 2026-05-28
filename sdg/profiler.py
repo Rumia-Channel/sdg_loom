@@ -35,6 +35,8 @@ class LLMUsageStats:
     prompt_tokens: int = 0
     completion_tokens: int = 0
     total_tokens: int = 0
+    cache_hit_tokens: int = 0   # DeepSeek KVキャッシュヒット
+    cache_miss_tokens: int = 0  # DeepSeek KVキャッシュミス
     latencies_ms: List[int] = field(default_factory=list)
     errors: int = 0
 
@@ -72,6 +74,7 @@ class LLMUsageStats:
 
     def to_dict(self) -> Dict[str, Any]:
         """辞書形式に変換"""
+        cache_total = self.cache_hit_tokens + self.cache_miss_tokens
         return {
             "model_name": self.model_name,
             "call_count": self.call_count,
@@ -79,6 +82,9 @@ class LLMUsageStats:
             "completion_tokens": self.completion_tokens,
             "total_tokens": self.total_tokens,
             "errors": self.errors,
+            "cache_hit_tokens": self.cache_hit_tokens,
+            "cache_miss_tokens": self.cache_miss_tokens,
+            "cache_hit_rate": round(self.cache_hit_tokens / cache_total, 4) if cache_total > 0 else 0.0,
             "latency": {
                 "avg_ms": round(self.avg_latency_ms, 2),
                 "p50_ms": round(self.p50_latency_ms, 2),
@@ -140,7 +146,7 @@ class ProfileCollector:
         collector = ProfileCollector()
 
         # 生成中にメトリクスを記録
-        collector.record_llm_call("gpt-4", prompt_tokens=100, completion_tokens=50, latency_ms=500)
+        collector.record_llm_call("deepseek-v4-pro", prompt_tokens=100, completion_tokens=50, latency_ms=500)
         collector.record_output("生成されたテキスト", output_field="answer")
 
         # 最終プロファイルを取得
@@ -207,6 +213,8 @@ class ProfileCollector:
         completion_tokens: int = 0,
         latency_ms: int = 0,
         error: bool = False,
+        cache_hit_tokens: int = 0,
+        cache_miss_tokens: int = 0,
     ):
         """
         LLM呼び出しを記録する。
@@ -217,6 +225,8 @@ class ProfileCollector:
             completion_tokens: 生成トークン数
             latency_ms: レイテンシ（ミリ秒）
             error: エラーが発生したか
+            cache_hit_tokens: DeepSeek KVキャッシュヒットトークン数
+            cache_miss_tokens: DeepSeek KVキャッシュミストークン数
         """
         stats = self._llm_stats[model_name]
         stats.model_name = model_name
@@ -224,6 +234,8 @@ class ProfileCollector:
         stats.prompt_tokens += prompt_tokens
         stats.completion_tokens += completion_tokens
         stats.total_tokens += prompt_tokens + completion_tokens
+        stats.cache_hit_tokens += cache_hit_tokens
+        stats.cache_miss_tokens += cache_miss_tokens
         if latency_ms > 0:
             stats.latencies_ms.append(latency_ms)
         if error:

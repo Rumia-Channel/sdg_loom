@@ -18,11 +18,21 @@ class LLMCallResult:
     completion_tokens: int = 0
     total_tokens: int = 0
     reasoning: Optional[str] = None  # Reasoning思考プロセス
+    cache_hit_tokens: int = 0   # DeepSeek KVキャッシュヒットトークン数
+    cache_miss_tokens: int = 0  # DeepSeek KVキャッシュミストークン数
 
     @property
     def success(self) -> bool:
         """成功したかどうか"""
         return self.error is None
+
+    @property
+    def cache_hit_rate(self) -> float:
+        """キャッシュヒット率"""
+        total = self.cache_hit_tokens + self.cache_miss_tokens
+        if total == 0:
+            return 0.0
+        return self.cache_hit_tokens / total
 
 
 class LLMError(RuntimeError):
@@ -303,11 +313,11 @@ def _extract_reasoning(message) -> str | None:
     """
     LLMレスポンスのメッセージからreasoning（思考プロセス）を抽出する。
 
-    OpenAI SDK v2ではreasoningフィールドが標準model_fieldsに含まれないため、
-    複数のソースから取得を試みる:
-      1. message.reasoning (将来のSDKバージョン / カスタムフィールド)
-      2. message.reasoning_content (OpenAI o-series / GPT-5系)
-      3. message.model_extra (Pydantic v2のextraフィールド - OpenRouter等)
+    DeepSeekのthinking modeではreasoning_contentフィールドに思考プロセスが返される。
+    OpenAI SDK標準のfieldに含まれないため複数ソースから取得を試みる:
+      1. message.reasoning_content (DeepSeek thinking mode)
+      2. message.reasoning (互換性: 将来のSDKバージョン)
+      3. message.model_extra (Pydantic v2のextraフィールド)
 
     Args:
         message: ChatCompletionMessageオブジェクト
@@ -315,21 +325,21 @@ def _extract_reasoning(message) -> str | None:
     Returns:
         reasoning文字列、またはNone
     """
-    # 1. 標準的なreasoningフィールド
-    reasoning = getattr(message, "reasoning", None)
-    if reasoning:
-        return reasoning
-
-    # 2. reasoning_content (OpenAI o-series / GPT-5系)
+    # 1. DeepSeek thinking mode: reasoning_content
     reasoning = getattr(message, "reasoning_content", None)
     if reasoning:
         return reasoning
 
-    # 3. Pydantic v2 model_extra (OpenRouter等のカスタムフィールド)
+    # 2. 標準的なreasoningフィールド（互換性）
+    reasoning = getattr(message, "reasoning", None)
+    if reasoning:
+        return reasoning
+
+    # 3. Pydantic v2 model_extra
     model_extra = getattr(message, "model_extra", None)
     if model_extra and isinstance(model_extra, dict):
-        reasoning = model_extra.get("reasoning") or model_extra.get(
-            "reasoning_content"
+        reasoning = model_extra.get("reasoning_content") or model_extra.get(
+            "reasoning"
         )
         if reasoning:
             return reasoning
@@ -341,8 +351,8 @@ class LLMClient:
     """
     LLM APIクライアント。
 
-    OpenAI互換のAPIサーバー（vLLM、SGLang、OpenAI等）と通信するための
-    非同期HTTPクライアント。共有HTTPトランスポートを使用することで、
+    DeepSeek APIと通信するための非同期HTTPクライアント。
+    共有HTTPトランスポートを使用することで、
     コネクションプールを効率的に再利用し、HTTP/2多重化を活用できる。
 
     Attributes:
@@ -354,18 +364,18 @@ class LLMClient:
         use_shared_transport: 共有トランスポートを使用するかどうか
 
     Example:
-        # 標準的な使用方法（AsyncOpenAI SDK使用）
+        # 標準的な使用方法（DeepSeek API）
         client = LLMClient(
-            base_url="http://localhost:8000",
-            api_key="your-api-key",
+            base_url="https://api.deepseek.com",
+            api_key="your-deepseek-api-key",
             organization=None,
             headers={},
         )
 
         # 共有HTTPトランスポートを使用（推奨：大規模並列処理時）
         client = LLMClient(
-            base_url="http://localhost:8000",
-            api_key="your-api-key",
+            base_url="https://api.deepseek.com",
+            api_key="your-deepseek-api-key",
             organization=None,
             headers={},
             use_shared_transport=True,
@@ -374,8 +384,8 @@ class LLMClient:
         # DI（依存性注入）パターン：外部からtransportを注入
         transport = SharedHttpTransport()
         client = LLMClient(
-            base_url="http://localhost:8000",
-            api_key="your-api-key",
+            base_url="https://api.deepseek.com",
+            api_key="your-deepseek-api-key",
             organization=None,
             headers={},
             transport=transport,  # 外部で管理されるtransportを注入
@@ -420,7 +430,7 @@ class LLMClient:
             transport引数を使用する場合、呼び出し元がtransportのライフサイクルを
             管理する責任があります。aclose()の呼び出しを忘れないでください。
         """
-        base = (base_url or "https://api.openai.com").rstrip("/")
+        base = (base_url or "https://api.deepseek.com").rstrip("/")
         if base.endswith("/v1"):
             self.api_root = base
         else:
@@ -566,7 +576,7 @@ class LLMClient:
                 try:
                     resp = await self.client.chat.completions.create(
                         **req,
-                        # pass through any additional vendor-specific headers if needed (e.g., OpenRouter, etc.)
+                        # pass through any additional vendor-specific headers if needed
                         extra_headers=(
                             self.extra_headers if self.extra_headers else None
                         ),
@@ -583,10 +593,15 @@ class LLMClient:
                     prompt_tokens = 0
                     completion_tokens = 0
                     total_tokens = 0
+                    cache_hit_tokens = 0
+                    cache_miss_tokens = 0
                     if hasattr(resp, "usage") and resp.usage is not None:
                         prompt_tokens = getattr(resp.usage, "prompt_tokens", 0) or 0
                         completion_tokens = getattr(resp.usage, "completion_tokens", 0) or 0
                         total_tokens = getattr(resp.usage, "total_tokens", 0) or 0
+                        # DeepSeek KVキャッシュヒット/ミス
+                        cache_hit_tokens = getattr(resp.usage, "prompt_cache_hit_tokens", 0) or 0
+                        cache_miss_tokens = getattr(resp.usage, "prompt_cache_miss_tokens", 0) or 0
 
                     # 空返答チェック: contentがNone、空文字列、またはwhitespaceのみの場合
                     # ただし、reasoningに内容がある場合は空返答とみなさない
@@ -605,6 +620,8 @@ class LLMClient:
                             completion_tokens=completion_tokens,
                             total_tokens=total_tokens,
                             reasoning=reasoning,
+                            cache_hit_tokens=cache_hit_tokens,
+                            cache_miss_tokens=cache_miss_tokens,
                         )
 
                     return LLMCallResult(
@@ -615,6 +632,8 @@ class LLMClient:
                         completion_tokens=completion_tokens,
                         total_tokens=total_tokens,
                         reasoning=reasoning,
+                        cache_hit_tokens=cache_hit_tokens,
+                        cache_miss_tokens=cache_miss_tokens,
                     )
                 except Exception as e:
                     # Try to classify retryable errors similar to original logic

@@ -1,4 +1,6 @@
-# SDG-LOOM
+# SDG-LOOM DeepSeek Edition
+
+> **This is a DeepSeek-optimized edition of SDG-LOOM.** All defaults, optimizations, and examples are tuned specifically for the [DeepSeek API](https://api-docs.deepseek.com/), leveraging KV context caching, thinking mode, and HTTP/2 connection pooling to maximize throughput and cost efficiency.
 
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/foxn2000/sdg_loom)
 
@@ -6,18 +8,23 @@
 
 ## Overview
 
-**SDG-LOOM (Scalable Data Generator LOOM)** is a framework designed to efficiently generate synthetic datasets for LLMs (Large Language Models) and perform large-scale data analysis using AI agents. It is specifically designed for use cases that require parallel operation of numerous AI agents and high-speed batch processing, achieving significant improvements in processing capacity and flexibility compared to traditional methods.
+**SDG-LOOM (Scalable Data Generator LOOM)** is a framework optimized for **DeepSeek API** to efficiently generate synthetic datasets for LLMs and perform large-scale data analysis using AI agents. By leveraging DeepSeek's KV cache (context caching) and thinking mode, it achieves dramatically improved throughput and quality in high-frequency batch processing scenarios.
 
-By adopting the latest **MABEL (Model And Blocks Expansion Language) v2.0**, it enables highly descriptive and flexible structured agent programs. Additionally, it allows simultaneous operation of different LLM models, making load balancing and performance optimization easy. This makes it highly effective for tasks such as large-scale data analysis using LLMs, data augmentation, real-time inference, and synthetic data generation.
+By adopting the latest **MABEL (Model And Blocks Expansion Language) v2.0**, it enables highly descriptive and flexible structured agent programs. It is built specifically for **DeepSeek's API**, leveraging unique features like automatic disk-based KV context caching, thinking mode for reasoning chains, and prefix caching for repeated system prompts — achieving orders-of-magnitude cost savings on large-scale generation tasks.
 
-Furthermore, by incorporating adaptive batch processing and error handling mechanisms internally, stable operation is possible even in situations where request volumes fluctuate. It is particularly optimized for workloads involving high-frequency and large-scale inference, such as Natural Language Processing (NLP), generative AI applications, and AI agent-based automation systems.
+Furthermore, by incorporating adaptive batch processing and error handling mechanisms internally, stable operation is possible even in situations where request volumes fluctuate. It is specifically optimized for DeepSeek's KV cache behavior: repeated system prompts and prefix patterns are automatically cached on disk, delivering massive token savings in pipeline scenarios where the same template is applied across thousands of rows.
 
-This framework is designed with a focus on large-scale, high-speed, and stable utilization of AI agents, making it an ideal tool for users who need to efficiently scale up advanced tasks using LLMs.
+This framework is designed with a focus on large-scale, high-speed, and stable utilization of AI agents, making it an ideal tool for users who need to efficiently scale up advanced tasks using the DeepSeek API.
 
 ---
 
 ## Features
 
+* **DeepSeek API Optimized**
+  * Automatic KV context caching (disk-based prefix cache) utilization
+  * Thinking mode (chain-of-thought reasoning) support
+  * Cache hit/miss tracking and cost analysis
+  * Optimized HTTP/2 connection pooling for DeepSeek endpoints
 * **MABEL v2.0 Support**
   * Turing-complete expression language (MEX)
   * Advanced control structures (`while`, `recurse`, `reduce`, `call`, `let`)
@@ -127,14 +134,14 @@ mabel:
   version: "2.0"
 
 models:
-  - name: gpt4
-    api_model: gpt-4o-mini
-    api_key: ${ENV.OPENAI_API_KEY}
+  - name: deepseek
+    api_model: deepseek-v4-flash
+    api_key: ${ENV.DEEPSEEK_API_KEY}
 
 blocks:
   - type: ai
     exec: 1
-    model: gpt4
+    model: deepseek
     prompts:
       - "Summarize: {UserInput}"
     outputs:

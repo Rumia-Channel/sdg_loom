@@ -17,7 +17,7 @@
 mkdir -p output/tests
 
 # LLMサーバーが起動していることを確認
-# 例: http://localhost:8000/v1 でqwen3モデルが利用可能
+# 例: DeepSeek APIでdeepseek-v4-proが利用可能
 ```
 
 ---

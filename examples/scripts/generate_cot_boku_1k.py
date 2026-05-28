@@ -31,7 +31,7 @@ cot_japanese_math_boku.yaml を使った大規模生成サンプル
     python examples/scripts/generate_cot_boku_1k.py --resume
 
 環境変数:
-    SDG_API_MODEL : モデル名（例: qwen3, gpt-4o）
+    SDG_API_MODEL : モデル名（推奨: deepseek-v4-pro）
     SDG_API_KEY   : APIキー
     SDG_BASE_URL  : プロバイダURL（例: http://localhost:8000/v1）
 """

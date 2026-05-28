@@ -3,6 +3,7 @@
 #   1. seedデータから小説生成用プロンプトをLLMで作成
 #   2. 作成したプロンプトを元に小説をLLMで生成
 # 最終出力: input（生成プロンプト）, output（小説本文）
+# DeepSeek thinking mode を使用して高品質な小説を生成
 
 mabel:
   version: "2.0"
@@ -10,16 +11,14 @@ mabel:
   name: "Novel Generator"
   description: "seedデータから小説生成プロンプトを作成し、そのプロンプトで小説を生成する二段階フロー"
 
-# モデル設定（OpenRouter経由）
+# DeepSeek thinking mode で高品質な創作
 models:
-  - name: openrouter
-    api_model: "openai/gpt-oss-120b"
-    api_key: "${ENV.OPENROUTER_API_KEY}"
-    base_url: https://openrouter.ai/api/v1
-    enable_reasoning: true         # Enable reasoning feature (required)
-    include_reasoning: true        # Include reasoning in response
-    reasoning_effort: low          # Effort level: low/medium/high/xhigh/minimal
-    exclude_reasoning: false       # Do not exclude reasoning
+  - name: deepseek
+    api_model: "deepseek-v4-pro"
+    api_key: "${ENV.DEEPSEEK_API_KEY}"
+    enable_reasoning: true
+    include_reasoning: true
+    reasoning_effort: "high"
     request_defaults:
       temperature: 0.8
       max_tokens: 12000
@@ -51,7 +50,7 @@ blocks:
     exec: 1
     id: generate_prompt
     name: "Step 1: Generate Novel Prompt from Seed"
-    model: openrouter
+    model: deepseek
     system_prompt: |
       あなたはプロの小説家であり、創作プロンプトの設計者です。
       与えられた設定情報（ジャンル、テーマ、舞台、主人公、物語の起点、雰囲気、文体、長さ）を元に、
@@ -88,7 +87,7 @@ blocks:
     exec: 2
     id: write_novel
     name: "Step 2: Write Novel from Generated Prompt"
-    model: openrouter
+    model: deepseek
     system_prompt: |
       あなたはプロの小説家です。
       与えられたプロンプトに忠実に従い、高品質な小説を執筆してください。
@@ -130,7 +129,7 @@ blocks:
 
 # ============================================================
 # 実行コマンド:
-# python -m sdg run \
+# sdg run \
 #   --yaml examples/novel_generator.yaml \
 #   --input examples/data/novel_seeds.jsonl \
 #   --output output/novels.jsonl

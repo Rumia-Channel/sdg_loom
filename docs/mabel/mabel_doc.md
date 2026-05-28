@@ -27,7 +27,7 @@ runtime:                    # v2: 実行環境
     requirements_file: "requirements.txt"   # 任意
     allow_network: false               # 既定で外部通信を禁止（サンドボックス方針）
     env:                               # 子プロセスや関数に渡す環境変数
-      OPENAI_API_KEY: "${ENV.OPENAI_API_KEY}"
+      DEEPSEEK_API_KEY: "${ENV.DEEPSEEK_API_KEY}"
 
 globals:                    # v2: グローバルの定数と変数
   const:                    # 読み取り専用
@@ -49,9 +49,9 @@ functions:                  # v2: ユーザ定義関数群
 
 models:                     # 接続先 LLM 群（§4）
   - name: planner
-    api_model: "gpt-4o-mini"
-    api_key: "${ENV.OPENAI_API_KEY}"
-    base_url: "https://api.openai.com/v1"
+    api_model: "deepseek-v4-flash"
+    api_key: "${ENV.DEEPSEEK_API_KEY}"
+    base_url: "https://api.deepseek.com"
     request_defaults:
       temperature: 0.2
       top_p: 1.0
@@ -109,7 +109,7 @@ YAML 標準: `null / boolean / number / string / list / object`。
 
 ### 2.3 環境変数注入
 
-`${ENV.NAME}` の形で YAML 値に書くと、実行時に OS の環境変数へ解決（例: `${ENV.OPENAI_API_KEY}`）。
+`${ENV.NAME}` の形で YAML 値に書くと、実行時に OS の環境変数へ解決（例: `${ENV.DEEPSEEK_API_KEY}`）。
 
 **実装ポイント**
 
@@ -152,9 +152,9 @@ YAML 標準: `null / boolean / number / string / list / object`。
 | フィールド              |  必須 | 例                             | 説明                                                  |
 | ------------------ | :-: | ----------------------------- | --------------------------------------------------- |
 | `name`             |  ✓  | `"planner"`                   | ブロックから参照する識別子                                       |
-| `api_model`        |  ✓  | `"gpt-4o-mini"`               | 実 API 上のモデル名                                        |
-| `api_key`          |  ✓  | `"${ENV.OPENAI_API_KEY}"`     | 認証キー                                                |
-| `base_url`         |     | `"https://api.openai.com/v1"` | Chat Completions 互換エンドポイント                          |
+| `api_model`        |  ✓  | `"deepseek-v4-flash"`               | 実 API 上のモデル名                                        |
+| `api_key`          |  ✓  | `"${ENV.DEEPSEEK_API_KEY}"`     | 認証キー                                                |
+| `base_url`         |     | `"https://api.deepseek.com"` | DeepSeek Chat Completions エンドポイント                          |
 | `organization`     |     | `string`                      | 任意の組織 ID                                            |
 | `headers`          |     | `object`                      | 追加ヘッダ                                               |
 | `request_defaults` |     | `object`                      | `temperature/top_p/max_tokens/timeout_sec/retry` など |
@@ -169,17 +169,17 @@ YAML 標準: `null / boolean / number / string / list / object`。
 ```yaml
 models:
   - name: writer
-    api_model: "gemma-3-1b-it"
-    api_key: "${ENV.OPENAI_API_KEY}"
-    base_url: "https://api.openai.com/v1"
+    api_model: "deepseek-v4-pro"
+    api_key: "${ENV.DEEPSEEK_API_KEY}"
+    base_url: "https://api.deepseek.com"
     request_defaults:
       temperature: 0.3
       max_tokens: 400
 
   # v2.1: Vision対応モデル
   - name: vision_model
-    api_model: "gpt-4o"
-    api_key: "${ENV.OPENAI_API_KEY}"
+    api_model: "deepseek-v4-pro"
+    api_key: "${ENV.DEEPSEEK_API_KEY}"
     capabilities: ["vision"]  # Vision対応を明示
 ```
 
@@ -252,8 +252,8 @@ images:
 
 models:
   - name: vision
-    api_model: "gpt-4o"
-    api_key: "${ENV.OPENAI_API_KEY}"
+    api_model: "deepseek-v4-pro"
+    api_key: "${ENV.DEEPSEEK_API_KEY}"
     capabilities: ["vision"]
 
 blocks:
@@ -696,7 +696,7 @@ runtime:
     requirements_file: "requirements.txt"
     allow_network: false
     env:
-      OPENAI_API_KEY: "${ENV.OPENAI_API_KEY}"
+      DEEPSEEK_API_KEY: "${ENV.DEEPSEEK_API_KEY}"
 
 globals:
   const:
@@ -714,15 +714,15 @@ budgets:
 
 models:
   - name: planner
-    api_model: "phi4-mini"
-    api_key: "${ENV.OPENAI_API_KEY}"
+    api_model: "deepseek-v4-flash"
+    api_key: "${ENV.DEEPSEEK_API_KEY}"
     base_url: "http://127.0.0.1:11500/v1"
     request_defaults:
       temperature: 0.2
       max_tokens: 400
   - name: writer
-    api_model: "gemma-3-1b-it"
-    api_key: "${ENV.OPENAI_API_KEY}"
+    api_model: "deepseek-v4-pro"
+    api_key: "${ENV.DEEPSEEK_API_KEY}"
     base_url: "http://127.0.0.1:11500/v1"
     request_defaults:
       temperature: 0.3

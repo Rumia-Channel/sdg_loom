@@ -38,7 +38,7 @@ runtime:          # Execution environment (v2 new/extended)
       - "httpx>=0.27"
     allow_network: false                  # Default: external network blocking
     env:                                  # Environment variables (if needed)
-      OPENAI_API_KEY: ${ENV.OPENAI_API_KEY}
+      DEEPSEEK_API_KEY: ${ENV.DEEPSEEK_API_KEY}
     setup:                                # Optional setup hooks
       pre_install: []
       post_install: []
@@ -57,9 +57,9 @@ budgets:          # Global budgets (safety stops/limits)
 
 models:           # AI model definition array (v1 inherited/complete definition)
   - name: "planner"                   # Identification name referenced from blocks
-    api_model: "gpt-4o-mini"          # Model name on API
-    api_key: ${ENV.OPENAI_API_KEY}
-    base_url: "https://api.openai.com/v1"  # Optional
+    api_model: "deepseek-v4-flash"     # Model name on API
+    api_key: ${ENV.DEEPSEEK_API_KEY}
+    base_url: "https://api.deepseek.com"  # Optional
     organization: null                     # Optional (provider-specific)
     headers: {}                            # Optional additional HTTP headers
     request_defaults:                      # Call defaults
@@ -159,9 +159,9 @@ connections: []   # Explicit wiring (optional, §8)
 | Field | Required | Type/Example | Description |
 |---|:--:|---|---|
 | `name` | ✓ | `"planner"` | Model identifier referenced from blocks |
-| `api_model` | ✓ | `"gpt-4o-mini"` | Actual API model name |
-| `api_key` | ✓ | `${ENV.OPENAI_API_KEY}` | Authentication key |
-| `base_url` |  | `"https://api.openai.com/v1"` | Endpoint |
+| `api_model` | ✓ | `"deepseek-v4-flash"` | Actual API model name |
+| `api_key` | ✓ | `${ENV.DEEPSEEK_API_KEY}` | Authentication key |
+| `base_url` |  | `"https://api.deepseek.com"` | Endpoint |
 | `organization` |  | `string` | Optional organization ID |
 | `headers` |  | `object` | Additional headers (e.g., `{"User-Agent":"Mabel"}`) |
 | `request_defaults` |  | `object` | `temperature`, `top_p`, `max_tokens`, `timeout_sec`, `retry`, etc. |
@@ -214,8 +214,8 @@ images:
 
 models:
   - name: vision
-    api_model: "gpt-4o"
-    api_key: "${ENV.OPENAI_API_KEY}"
+    api_model: "deepseek-v4-pro"
+    api_key: "${ENV.DEEPSEEK_API_KEY}"
     capabilities: ["vision"]
 
 blocks:
@@ -834,12 +834,14 @@ mabel:
   version: "2.1"
 models:
   - name: questioner
-    api_model: gpt-4o-mini
-    api_key: ${ENV.OPENAI_API_KEY}
-    request_defaults: { temperature: 0.2, max_tokens: 300 }
-  - name: responder
-    api_model: gpt-4.1
-    api_key: ${ENV.OPENAI_API_KEY}
+    api_model: deepseek-v4-flash
+    api_key: ${ENV.DEEPSEEK_API_KEY}
+    request_defaults:
+      temperature: 0.3
+      max_tokens: 1024
+  - name: reasoning
+    api_model: deepseek-v4-pro
+    api_key: ${ENV.DEEPSEEK_API_KEY}
     request_defaults: { temperature: 0.5, max_tokens: 800 }
 blocks:
   - type: ai
@@ -1016,8 +1018,8 @@ images:
 
 models:
   - name: vision
-    api_model: "gpt-4o"
-    api_key: "${ENV.OPENAI_API_KEY}"
+    api_model: "deepseek-v4-pro"
+    api_key: "${ENV.DEEPSEEK_API_KEY}"
     capabilities: ["vision"]
 
 blocks:

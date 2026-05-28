@@ -637,9 +637,9 @@ MABEL YAMLの`models`セクションでReasoning機能を有効化します：
 ```yaml
 models:
   - name: reasoning_model
-    api_model: openai/gpt-oss-120b
-    api_key: "${ENV.OPENROUTER_API_KEY}"
-    base_url: https://openrouter.ai/api/v1
+    api_model: deepseek-v4-pro
+    api_key: "${ENV.DEEPSEEK_API_KEY}"
+    base_url: https://api.deepseek.com
     enable_reasoning: true         # Reasoning機能を有効化（必須）
     include_reasoning: true        # Reasoning出力をレスポンスに含める
     reasoning_effort: low          # Effortレベル: low/medium/high/xhigh/minimal
@@ -663,43 +663,30 @@ models:
 - **`enable_reasoning: true`** を設定しないと、他のReasoning関連設定が無視されます
 - `include_reasoning` と `exclude_reasoning` は相反する設定です。通常は `include_reasoning: true` を使用します
 
-### プロバイダー別の対応
+### DeepSeek Thinking Mode 対応
 
-SDGは、API プロバイダーのベースURLに基づいて適切なReasoning形式を自動選択します：
+SDG-LOOMはDeepSeekのthinking mode（思考連鎖推論）に最適化されています：
 
-#### OpenRouter（推奨）
+#### Thinking Mode の有効化
 ```yaml
-base_url: https://openrouter.ai/api/v1
+base_url: https://api.deepseek.com  # デフォルト、省略可能
 enable_reasoning: true
-reasoning_effort: high
+reasoning_effort: high              # "high" または "max"
 ```
 
-OpenRouterでは以下の形式でAPIに送信されます：
+DeepSeek形式でAPIに送信：
 ```json
 {
   "extra_body": {
-    "reasoning": {
-      "enabled": true,
-      "effort": "high",
-      "exclude": false
+    "thinking": {
+      "type": "enabled"
     }
-  }
+  },
+  "reasoning_effort": "high"
 }
 ```
 
-#### OpenAI（o1/o3/GPT-5系）
-```yaml
-base_url: https://api.openai.com/v1
-enable_reasoning: true
-reasoning_effort: medium
-```
-
-OpenAIでは以下の形式でAPIに送信されます：
-```json
-{
-  "reasoning_effort": "medium"
-}
-```
+DeepSeekはレスポンスの `reasoning_content` フィールドに思考プロセスを返します。thinking modeでは `temperature`、`top_p`、`presence_penalty`、`frequency_penalty` パラメータは無効です（設定しても効果はありません）。
 
 ### 出力フォーマット
 
@@ -719,20 +706,19 @@ Reasoningが有効な場合、AIブロックの出力は`<think></think>`タグ�
 ```bash
 # Reasoning機能を使用したパイプライン実行
 sdg run \
-  --yaml examples/reasoning_demo.yaml \
+  --yaml examples/novel_generator.yaml \
   --input data.jsonl \
   --output result.jsonl
 ```
 
 ### トラブルシューティング
 
-**エラー: "Only one of 'reasoning' and 'reasoning_effort' may be provided"**
-- これはOpenRouterで両方の形式が同時に送信された場合に発生します
-- 修正: SDGは自動的にプロバイダーを判定しますが、問題がある場合は `base_url` が正しいか確認してください
-
 **Reasoningが出力に含まれない**
 - **最も一般的な原因**: `enable_reasoning: true` が設定されていない
 - `include_reasoning: true` だけでは不十分です。必ず `enable_reasoning: true` を設定してください
+
+**Thinking modeでtemperature設定が無視される**
+- DeepSeek thinking modeでは `temperature`、`top_p` 等は使用されません。これは想定通りの動作です。
 
 ---
 
@@ -1610,7 +1596,7 @@ sdg run \
 
 1. **APIキーエラー**
    - YAMLファイルの `api_key` フィールドを確認してください
-   - 環境変数を使用する場合は `api_key: "${OPENAI_API_KEY}"` のように設定します
+    - 環境変数を使用する場合は `api_key: "${DEEPSEEK_API_KEY}"` のように設定します
 
 2. **入力ファイルが見つからない**
    - ファイルパスが正しいことを確認してください

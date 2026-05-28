@@ -637,9 +637,9 @@ Enable Reasoning in the `models` section of your MABEL YAML:
 ```yaml
 models:
   - name: reasoning_model
-    api_model: openai/gpt-oss-120b
-    api_key: "${ENV.OPENROUTER_API_KEY}"
-    base_url: https://openrouter.ai/api/v1
+    api_model: deepseek-v4-pro
+    api_key: "${ENV.DEEPSEEK_API_KEY}"
+    base_url: https://api.deepseek.com
     enable_reasoning: true         # Enable reasoning feature (required)
     include_reasoning: true        # Include reasoning in response
     reasoning_effort: low          # Effort level: low/medium/high/xhigh/minimal
@@ -663,43 +663,30 @@ models:
 - Without **`enable_reasoning: true`**, all other reasoning-related settings are ignored
 - `include_reasoning` and `exclude_reasoning` are conflicting settings. Normally use `include_reasoning: true`
 
-### Provider-Specific Support
+### DeepSeek Thinking Mode Support
 
-SDG automatically selects the appropriate reasoning format based on the API provider's base URL:
+SDG-LOOM is optimized for DeepSeek's thinking mode (chain-of-thought reasoning):
 
-#### OpenRouter (Recommended)
+#### Enabling Thinking Mode
 ```yaml
-base_url: https://openrouter.ai/api/v1
+base_url: https://api.deepseek.com  # default, can be omitted
 enable_reasoning: true
-reasoning_effort: high
+reasoning_effort: high              # "high" or "max"
 ```
 
-OpenRouter format sent to API:
+DeepSeek format sent to API:
 ```json
 {
   "extra_body": {
-    "reasoning": {
-      "enabled": true,
-      "effort": "high",
-      "exclude": false
+    "thinking": {
+      "type": "enabled"
     }
-  }
+  },
+  "reasoning_effort": "high"
 }
 ```
 
-#### OpenAI (o1/o3/GPT-5 series)
-```yaml
-base_url: https://api.openai.com/v1
-enable_reasoning: true
-reasoning_effort: medium
-```
-
-OpenAI format sent to API:
-```json
-{
-  "reasoning_effort": "medium"
-}
-```
+DeepSeek returns the thinking process via `reasoning_content` in the response. Note that thinking mode does not support `temperature`, `top_p`, `presence_penalty`, or `frequency_penalty` parameters (setting them has no effect).
 
 ### Output Format
 
@@ -719,20 +706,19 @@ The final answer is...
 ```bash
 # Run pipeline with reasoning enabled
 sdg run \
-  --yaml examples/reasoning_demo.yaml \
+  --yaml examples/novel_generator.yaml \
   --input data.jsonl \
   --output result.jsonl
 ```
 
 ### Troubleshooting
 
-**Error: "Only one of 'reasoning' and 'reasoning_effort' may be provided"**
-- This occurs when both formats are sent to OpenRouter simultaneously
-- Fix: SDG automatically detects the provider, but verify your `base_url` is correct if issues persist
-
 **Reasoning not included in output**
 - **Most common cause**: `enable_reasoning: true` is not set
 - `include_reasoning: true` alone is insufficient. You must set `enable_reasoning: true`
+
+**Thinking mode ignores temperature settings**
+- DeepSeek thinking mode does not use `temperature`, `top_p`, etc. This is expected behavior.
 
 ---
 
@@ -1610,7 +1596,7 @@ sdg run \
 
 1. **API Key Errors**
    - Check the `api_key` field in the YAML file
-   - When using environment variables, set it as `api_key: "${OPENAI_API_KEY}"`
+    - When using environment variables, set it as `api_key: "${DEEPSEEK_API_KEY}"`
 
 2. **Input File Not Found**
    - Verify the file path is correct

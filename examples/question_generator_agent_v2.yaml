@@ -12,12 +12,11 @@ mabel:
     資料を参照して質問の原型を作成し、多角化・個別進化・個別検証を経て
     複数のLLMベンチマーク用質問を生成するエージェント（v2: 個別評価対応）
 
-# モデル設定（qwen3 - 出力形式: <think>思考</think>回答）
+# DeepSeekモデル設定
 models:
-  - name: qwen3
-    api_model: "qwen3"
-    api_key: "sk-local"
-    base_url: http://localhost:8000/v1
+  - name: deepseek
+    api_model: "deepseek-v4-pro"
+    api_key: "${ENV.DEEPSEEK_API_KEY}"
     request_defaults:
       temperature: 0.7
       max_tokens: 4096
@@ -63,7 +62,7 @@ blocks:
     exec: 10
     id: create_original_question
     name: "Step 1: Create Original Question from Source"
-    model: qwen3
+    model: deepseek
     system_prompt: |
       # 役割
       あなたはLLMベンチマーク評価のための高品質な質問を設計する専門家です。
@@ -134,7 +133,7 @@ blocks:
     exec: 20
     id: diversify_questions
     name: "Step 2: Diversify Questions (4 Perspectives)"
-    model: qwen3
+    model: deepseek
     system_prompt: |
       # 役割
       あなたは認知科学とブルームの分類法に精通した質問設計の専門家です。
@@ -228,7 +227,7 @@ blocks:
     exec: 41
     id: evolve_question1
     name: "Step 4-1: Evolve Question 1 (Cause & Reason - Deep Analysis)"
-    model: qwen3
+    model: deepseek
     system_prompt: |
       # 役割
       あなたは「根本原因分析（Root Cause Analysis）」の専門家です。
@@ -303,7 +302,7 @@ blocks:
     exec: 42
     id: evolve_question2
     name: "Step 4-2: Evolve Question 2 (Method & Process - Practical Application)"
-    model: qwen3
+    model: deepseek
     system_prompt: |
       # 役割
       あなたは「実践知（Practical Knowledge）」の専門家です。
@@ -378,7 +377,7 @@ blocks:
     exec: 43
     id: evolve_question3
     name: "Step 4-3: Evolve Question 3 (Comparison - Multi-angle Analysis)"
-    model: qwen3
+    model: deepseek
     system_prompt: |
       # 役割
       あなたは「比較分析（Comparative Analysis）」の専門家です。
@@ -453,7 +452,7 @@ blocks:
     exec: 44
     id: evolve_question4
     name: "Step 4-4: Evolve Question 4 (Impact & Result - Future Prediction)"
-    model: qwen3
+    model: deepseek
     system_prompt: |
       # 役割
       あなたは「影響分析（Impact Analysis）」と「シナリオプランニング」の専門家です。
@@ -532,7 +531,7 @@ blocks:
     exec: 51
     id: validate_question1
     name: "Step 5-1: Validate Question 1"
-    model: qwen3
+    model: deepseek
     system_prompt: |
       # 役割
       あなたはLLMベンチマーク用プロンプトの品質保証（QA）専門家です。
@@ -618,7 +617,7 @@ blocks:
     exec: 52
     id: validate_question2
     name: "Step 5-2: Validate Question 2"
-    model: qwen3
+    model: deepseek
     system_prompt: |
       # 役割
       あなたはLLMベンチマーク用プロンプトの品質保証（QA）専門家です。
@@ -704,7 +703,7 @@ blocks:
     exec: 53
     id: validate_question3
     name: "Step 5-3: Validate Question 3"
-    model: qwen3
+    model: deepseek
     system_prompt: |
       # 役割
       あなたはLLMベンチマーク用プロンプトの品質保証（QA）専門家です。
@@ -790,7 +789,7 @@ blocks:
     exec: 54
     id: validate_question4
     name: "Step 5-4: Validate Question 4"
-    model: qwen3
+    model: deepseek
     system_prompt: |
       # 役割
       あなたはLLMベンチマーク用プロンプトの品質保証（QA）専門家です。

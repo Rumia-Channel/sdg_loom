@@ -8,13 +8,6 @@ mabel:
 images:
   - name: sample_logo
     url: "https://upload.wikimedia.org/wikipedia/commons/thumb/4/47/PNG_transparency_demonstration_1.png/280px-PNG_transparency_demonstration_1.png"
-  # ローカルファイルの例（コメントアウト）
-  # - name: local_image
-  #   path: ./assets/sample.png
-  # Base64埋め込みの例（コメントアウト）
-  # - name: inline_image
-  #   base64: "iVBORw0KGgoAAAANSUhEUg..."
-  #   media_type: "image/png"
 
 # グローバル変数
 globals:
@@ -32,13 +25,13 @@ budgets:
     max_calls: 10
     max_tokens: 10000
 
-# Vision対応モデル
+# DeepSeek Vision対応モデル
 models:
   - name: vision
-    api_model: "gpt-4o-mini"  # Vision対応モデル
-    api_key: "${ENV.OPENAI_API_KEY}"
-    base_url: "https://api.openai.com/v1"
-    capabilities: ["vision"]  # Vision対応を明示
+    api_model: "deepseek-v4-pro"
+    api_key: "${ENV.DEEPSEEK_API_KEY}"
+    base_url: "https://api.deepseek.com"
+    capabilities: ["vision"]
     request_defaults:
       temperature: 0.2
       max_tokens: 1000

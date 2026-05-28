@@ -9,12 +9,11 @@ mabel:
     資料を参照して質問の原型を作成し、多角化・進化・検証を経て
     最終的にLLMベンチマーク用の質問文を生成するエージェント
 
-# モデル設定（qwen3 - 出力形式: <think>思考</think>回答）
+# DeepSeekモデル設定
 models:
-  - name: qwen3
-    api_model: "qwen3"
-    api_key: "sk-local"
-    base_url: http://localhost:8000/v1
+  - name: deepseek
+    api_model: "deepseek-v4-pro"
+    api_key: "${ENV.DEEPSEEK_API_KEY}"
     request_defaults:
       temperature: 0.7
       max_tokens: 4096
@@ -54,7 +53,7 @@ blocks:
     exec: 10
     id: create_original_question
     name: "Step 1: Create Original Question from Source"
-    model: qwen3
+    model: deepseek
     system_prompt: |
       あなたは教育・評価用の質問を作成する専門家です。
       与えられた資料を分析し、その内容に基づいて「質問の原型」を1つ作成してください。
@@ -98,7 +97,7 @@ blocks:
     exec: 20
     id: diversify_questions
     name: "Step 2: Diversify Questions (4 Perspectives)"
-    model: qwen3
+    model: deepseek
     system_prompt: |
       あなたは多角的な視点から質問を設計する専門家です。
       与えられた原型質問を基に、異なる角度・切り口から4つの新しい質問を作成してください。
@@ -154,7 +153,7 @@ blocks:
     exec: 30
     id: evolve_questions
     name: "Step 3: Evolve Questions (Difficulty & Naturalness)"
-    model: qwen3
+    model: deepseek
     system_prompt: |
       あなたは質問の高度化と自然な表現への変換を行う専門家です。
       与えられた4つの質問それぞれに対して、以下の進化を施してください。
@@ -220,7 +219,7 @@ blocks:
     exec: 40
     id: validate_and_select
     name: "Step 4: Validate and Select Best Question"
-    model: qwen3
+    model: deepseek
     system_prompt: |
       あなたはLLM評価用プロンプトの品質評価専門家です。
       与えられた4つの進化後の質問を評価し、最も優れた1つを選定してください。
@@ -358,12 +357,11 @@ blocks:
       - selection_reason
 
 # 実行コマンド例:
-# Not found that everyone. No. Hey, Billy. Hello. Call. Where they can kick you off. No one night at the moment can do no more. Just like that you guys. Mobile. Let me I can go. Take us. Instrumental. Artist. python -m sdg run \
+# sdg run \
 #   --yaml examples/question_generator_agent.yaml \
 #   --input examples/data/question_generator_input.jsonl \
 #   --output output/generated_questions.jsonl \
 #   --adaptive \
-#   --use-vllm-metrics \
 #   --min-batch 1 \
-#   --max-batch 64 \ 
+#   --max-batch 64 \
 #   --save-intermediate

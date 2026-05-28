@@ -8,7 +8,7 @@ SDG-LOOM - Python API サンプルコード
     python examples/scripts/run_sdg_example.py
 
 環境変数:
-    OPENAI_API_KEY: OpenAI APIキー（オプション、YAMLで直接指定している場合は不要）
+    DEEPSEEK_API_KEY: DeepSeek APIキー（オプション、YAMLで直接指定している場合は不要）
 """
 
 import asyncio

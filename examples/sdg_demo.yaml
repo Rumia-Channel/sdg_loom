@@ -2,16 +2,14 @@ mabel:
   version: "1.0"
 models:
   - name: planner
-    api_model: phi4-mini
-    api_key: "sk-proxy-example-123"
-    base_url: http://127.0.0.1:11500/v1
+    api_model: deepseek-v4-flash
+    api_key: "${ENV.DEEPSEEK_API_KEY}"
     request_defaults:
       temperature: 0.2
       max_tokens: 400
   - name: writer
-    api_model: gemma-3-1b-it
-    api_key: "sk-proxy-example-123"
-    base_url: http://127.0.0.1:11500/v1
+    api_model: deepseek-v4-pro
+    api_key: "${ENV.DEEPSEEK_API_KEY}"
     request_defaults:
       temperature: 0.3
       top_p: 0.95
