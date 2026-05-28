@@ -338,30 +338,32 @@ class AdaptiveController:
         max_concurrency: int = 64,
         target_latency_ms: float = 2000.0,
         target_queue_depth: int = 64,
-        # AIMD parameters - 非常にアグレッシブな設定
-        increase_step: int = 5,  # Additive increase per adjustment (CA phase) - 非常に積極的に増加
-        decrease_factor: float = 0.5,  # Multiplicative decrease factor (for errors) - 元の値に戻す
-        # Adjustment sensitivity - 非常に寛容に設定
-        latency_tolerance: float = 5.0,  # Trigger decrease if latency > target * tolerance - 非常に寛容に
-        error_rate_threshold: float = 0.1,  # 10% error rate triggers decrease - 元の値に戻す
+        # AIMD parameters - DeepSeek API 向け調整
+        increase_step: int = 10,  # Additive increase per adjustment (CA phase) - 積極的増加
+        decrease_factor: float = 0.5,  # Multiplicative decrease factor (for severe congestion)
+        # Adjustment sensitivity
+        latency_tolerance: float = 5.0,  # Trigger decrease if latency > target * tolerance
+        error_rate_threshold: float = 0.25,  # 25% error rate triggers decrease - DeepSeekでは寛容に
         # Timing
-        adjustment_interval_ms: int = 500,  # Minimum time between adjustments - より頻繁に調整
-        window_size: int = 30,  # Number of samples for averaging - より少ないサンプルで反応
+        adjustment_interval_ms: int = 500,  # Minimum time between adjustments
+        window_size: int = 30,  # Number of samples for averaging
         # Initial concurrency
         initial_concurrency: Optional[int] = None,
         # Use legacy semaphore for backward compatibility
         use_dynamic_semaphore: bool = True,
         # Advanced parameters
-        ema_alpha: float = 0.35,  # EMA smoothing factor - 非常に反応的に
+        ema_alpha: float = 0.35,  # EMA smoothing factor
         slow_start_threshold: Optional[int] = None,  # Initial ssthresh
-        vegas_alpha: float = 8.0,  # Vegas lower threshold - 非常に寛容に
-        vegas_beta: float = 15.0,  # Vegas upper threshold - 非常に寛容に
-        mild_decrease_factor: float = 0.98,  # Decrease factor for latency spikes - ほぼ減少させない
-        trend_sensitivity: float = 0.3,  # Threshold for trend detection - 非常に寛容に
+        vegas_alpha: float = 8.0,  # Vegas lower threshold
+        vegas_beta: float = 15.0,  # Vegas upper threshold
+        mild_decrease_factor: float = 0.98,  # Decrease factor for latency spikes - ほぼ下げない
+        trend_sensitivity: float = 0.3,  # Threshold for trend detection
         # Re-probe maximum concurrency after backoff.
         reprobe_enabled: bool = True,
-        reprobe_interval_rows: int = 32,
-        reprobe_interval_seconds: float = 120.0,
+        reprobe_interval_rows: int = 32,  # 早めに再プローブ
+        reprobe_interval_seconds: float = 60.0,  # 1分で再プローブ
+        # DeepSeek 固有: リカバリー時の最小並列数を高く保つ
+        recovery_floor: int = 8,  # 縮退してもこれ以下には下げない（DeepSeekは余裕がある）
     ):
         """
         Initialize the adaptive controller.
@@ -412,6 +414,7 @@ class AdaptiveController:
         self.reprobe_enabled = reprobe_enabled
         self.reprobe_interval_rows = max(1, reprobe_interval_rows)
         self.reprobe_interval_seconds = max(0.0, reprobe_interval_seconds)
+        self.recovery_floor = max(min_concurrency, recovery_floor)  # DeepSeek: 縮退下限
 
         # State - Start with slow start from initial_concurrency or a reasonable default
         if initial_concurrency is not None:
@@ -623,15 +626,14 @@ class AdaptiveController:
 
     def _track_error(self) -> None:
         """
-        Track error for immediate response.
+        Track error for response.
 
-        Implements aggressive backoff when errors are detected:
-        - First error in window: decrease by mild_decrease_factor
-        - Consecutive errors: more aggressive decrease
+        DeepSeek API: 429 rate-limit errors are transient and should NOT trigger
+        concurrency reduction. Only unrecoverable errors (e.g., 400, auth errors)
+        cause gradual backoff. Rate limits are handled by the HTTP retry layer.
         """
         now = time.time()
 
-        # Reset error window if expired
         if now - self._error_window_start > self._error_window_duration:
             self._recent_errors = 0
             self._error_window_start = now
@@ -640,37 +642,35 @@ class AdaptiveController:
         self._consecutive_errors += 1
         self._last_error_time = now
 
-        # Immediate response for errors - bypass normal adjustment interval
-        old_concurrency = self._current
-
-        if self._consecutive_errors >= 5:
-            # Multiple consecutive errors: aggressive reduction - 元の値に戻す
+        # DeepSeek: エラー急減衰は過剰反応になるため大幅緩和
+        # 連続エラーのみ、かつ高い閾値を超えた場合のみ縮退
+        if self._consecutive_errors >= 20:
+            # 20連続エラー→ようやく縮退（APIダウンなどの深刻な状況）
             new_concurrency = max(
-                self.min_concurrency, int(self._current * self.decrease_factor)
+                self.recovery_floor, int(self._current * self.decrease_factor)
             )
             action = "immediate_md_consecutive_errors"
-        elif self._recent_errors >= 3:
-            # Multiple errors in window: moderate reduction - 元の値に戻す
+            self._recent_errors = 0
+            self._consecutive_errors = 10  # 連続カウントをリセットしすぎない
+        elif self._recent_errors >= 10:
+            # 10件のエラー→軽度縮退
             new_concurrency = max(
-                self.min_concurrency, int(self._current * self.mild_decrease_factor)
+                self.recovery_floor, int(self._current * self.mild_decrease_factor)
             )
             action = "immediate_md_multiple_errors"
         else:
-            # Single error: very mild reduction - just reduce by 1 - 元の値に戻す
-            new_concurrency = max(
-                self.min_concurrency, self._current - 1
-            )
-            action = "immediate_decrease_single_error"
+            # 少数のエラー: 無視（DeepSeek APIでは正常範囲内）
+            self._record_adjustment("error_ignored")
+            return
 
+        old_concurrency = self._current
         if new_concurrency < old_concurrency:
-            self._ssthresh = max(self.min_concurrency, new_concurrency)
-            self._phase = ControlPhase.CONGESTION_AVOIDANCE
+            self._ssthresh = max(self.recovery_floor, new_concurrency)
+            self._phase = ControlPhase.SLOW_START  # スロースタートで素早く回復
             self._update_semaphore(old_concurrency, new_concurrency)
             self._current = new_concurrency
             self._mark_backoff(now)
             self._record_adjustment(action)
-
-            # Reset consecutive good counter
             self._consecutive_good = 0
             self._consecutive_bad += 1
 
@@ -690,11 +690,11 @@ class AdaptiveController:
             factor = self.decrease_factor
 
         old_concurrency = self._current
-        new_concurrency = max(self.min_concurrency, int(self._current * factor))
+        new_concurrency = max(self.recovery_floor, int(self._current * factor))
 
         if new_concurrency < old_concurrency:
-            self._ssthresh = max(self.min_concurrency, new_concurrency)
-            self._phase = ControlPhase.CONGESTION_AVOIDANCE
+            self._ssthresh = max(self.recovery_floor, new_concurrency)
+            self._phase = ControlPhase.SLOW_START  # 急速回復へ
             self._update_semaphore(old_concurrency, new_concurrency)
             self._current = new_concurrency
             self._mark_backoff(time.time())
@@ -755,7 +755,9 @@ class AdaptiveController:
         anchor_time = max(self._last_reprobe_time, self._last_backoff_time)
         samples_since = self._total_samples - anchor_sample
         if samples_since <= 0:
-            return False
+            # DeepSeek: サンプルがなくても時間経過でリプローブ
+            time_since = now - anchor_time
+            return time_since >= self.reprobe_interval_seconds
         time_since = now - anchor_time
         return (
             samples_since >= self.reprobe_interval_rows
@@ -915,12 +917,12 @@ class AdaptiveController:
 
         # === ERROR HANDLING (highest priority) ===
         if error_rate > self.error_rate_threshold:
-            # Immediate multiplicative decrease for errors
+            # DeepSeek: エラー率が高い場合のみ縮退（recovery_floorまで）
             new_concurrency = max(
-                self.min_concurrency, int(self._current * self.decrease_factor)
+                self.recovery_floor, int(self._current * self.decrease_factor)
             )
-            self._ssthresh = max(self.min_concurrency, new_concurrency)
-            self._phase = ControlPhase.SLOW_START
+            self._ssthresh = max(self.recovery_floor, new_concurrency)
+            self._phase = ControlPhase.SLOW_START  # スロースタートで急速回復
             self._consecutive_good = 0
             self._consecutive_bad += 1
             action = "md_error"
@@ -936,12 +938,12 @@ class AdaptiveController:
         congestion_level, severity = self._assess_congestion_level()
 
         if congestion_level == "severe":
-            # Multiplicative decrease for severe congestion
+            # DeepSeek: severeでも recovery_floor までしか下げない
             new_concurrency = max(
-                self.min_concurrency, int(self._current * self.decrease_factor)
+                self.recovery_floor, int(self._current * self.decrease_factor)
             )
-            self._ssthresh = max(self.min_concurrency, new_concurrency)
-            self._phase = ControlPhase.CONGESTION_AVOIDANCE
+            self._ssthresh = max(self.recovery_floor, new_concurrency)
+            self._phase = ControlPhase.SLOW_START  # 急速回復へ
             self._consecutive_good = 0
             self._consecutive_bad += 1
             action = "md_severe"
@@ -949,28 +951,17 @@ class AdaptiveController:
         elif congestion_level == "moderate":
             # Mild decrease for moderate congestion
             decrease = 1.0 - (1.0 - self.mild_decrease_factor) * severity
-            new_concurrency = max(self.min_concurrency, int(self._current * decrease))
-            self._ssthresh = max(self.min_concurrency, self._current)
-            self._phase = ControlPhase.CONGESTION_AVOIDANCE
+            new_concurrency = max(self.recovery_floor, int(self._current * decrease))
+            self._ssthresh = max(self.recovery_floor, self._current)
+            self._phase = ControlPhase.SLOW_START  # 急速回復へ
             self._consecutive_good = 0
             self._consecutive_bad += 1
             action = "decrease_moderate"
 
         elif congestion_level == "mild":
-            # Hold for mild congestion - don't decrease, just hold
-            self._consecutive_good = 0
-            self._consecutive_bad += 1
-
-            if self._consecutive_bad >= 20:
-                # Sustained mild congestion - very slight decrease (非常に寛容に)
-                new_concurrency = max(
-                    self.min_concurrency, self._current - 1
-                )
-                action = "decrease_mild"
-            else:
-                # Transient or acceptable - just hold
-                new_concurrency = self._current
-                action = "hold_mild"
+            # DeepSeek: mild は無視する（応答時間の自然変動のため）
+            new_concurrency = self._current
+            action = "hold_mild"
 
         else:
             # No congestion - increase
