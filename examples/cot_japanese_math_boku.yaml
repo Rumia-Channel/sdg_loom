@@ -10,24 +10,24 @@
 #   文体は全レベルで一貫して理論的・数学的な正式な日本語を用いる。
 #
 # モデル指定: 環境変数で実行時に指定（DeepSeek推奨）
-#   SDG_API_MODEL=deepseek-v4-pro
+#   SDG_API_MODEL=deepseek-v4-flash  （高速、2500並列対応）
+#   SDG_API_MODEL=deepseek-v4-pro    （高品質、500並列対応）
 #   SDG_API_KEY=sk-your-deepseek-key
 #   SDG_BASE_URL=https://api.deepseek.com
 #
 # 実行例:
 #   # テスト実行 (1件)
-#   $env:SDG_API_MODEL="deepseek-v4-pro"; $env:SDG_API_KEY="sk-..."; $env:SDG_BASE_URL="https://api.deepseek.com"
+#   $env:SDG_API_MODEL="deepseek-v4-flash"; $env:SDG_API_KEY="sk-..."; $env:SDG_BASE_URL="https://api.deepseek.com"
 #   sdg test-run --yaml examples/cot_japanese_math_boku.yaml --input examples/data/cot_japanese_math_seeds.jsonl
 #
 #   # 本番実行 (全55件)
-#   sdg run --yaml examples/cot_japanese_math_boku.yaml --input examples/data/cot_japanese_math_seeds.jsonl --output japanese_math_cot_boku.jsonl
+#   sdg run --yaml examples/cot_japanese_math_boku.yaml --input examples/data/cot_japanese_math_seeds.jsonl --output output/japanese_math_cot_boku.jsonl
 #
-#   # スケール用 seed 生成 (各レベル100件、通常問題70% + 補助シナリオ各10%)
-#   uv run python examples/scripts/generate_cot_japanese_math_scaled_seeds.py --items-per-level 100
-#   sdg run --yaml examples/cot_japanese_math_boku.yaml --input examples/data/cot_japanese_math_scaled_seeds.jsonl --output japanese_math_cot_boku_scaled.jsonl
+#   # スケール実行 (V4 Flash の 2500 並列を活かす)
+#   sdg run --yaml examples/cot_japanese_math_boku.yaml --input examples/data/cot_japanese_math_scaled_seeds.jsonl --output output/japanese_math_cot_boku_scaled.jsonl --adaptive --max-batch 2000 --resume
 #
-#   # 大規模向け: 適応的並行性 + 共有トランスポート
-#   sdg run --yaml examples/cot_japanese_math_boku.yaml --input examples/data/cot_japanese_math_scaled_seeds.jsonl --output japanese_math_cot_boku.jsonl --adaptive --max-batch 8 --target-latency-ms 2000 --use-shared-transport --resume
+#   # V4 Pro 向け (500並列)
+#   sdg run --yaml examples/cot_japanese_math_boku.yaml --input examples/data/cot_japanese_math_scaled_seeds.jsonl --output output/japanese_math_cot_boku_scaled.jsonl --adaptive --max-batch 500 --resume
 #
 # bash/Linux の場合:
 #   export SDG_API_MODEL="deepseek-v4-pro" SDG_API_KEY="sk-..." SDG_BASE_URL="https://api.deepseek.com"

@@ -37,7 +37,7 @@ models:
     api_key: "${ENV.SDG_API_KEY}"
     base_url: "${ENV.SDG_BASE_URL}"
     request_defaults:
-      # DeepSeek 推奨: SDG_API_MODEL=deepseek-v4-pro, SDG_API_KEY=sk-..., SDG_BASE_URL=https://api.deepseek.com
+      # DeepSeek 推奨: SDG_API_MODEL=deepseek-v4-flash (高速2500並列) or deepseek-v4-pro (高品質500並列)
     request_defaults:
       temperature: 0.3
       max_tokens: 8192

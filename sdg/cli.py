@@ -322,8 +322,8 @@ def build_run_parser(p: argparse.ArgumentParser) -> argparse.ArgumentParser:
     p.add_argument(
         "--max-concurrent",
         type=int,
-        default=8,
-        help="Max concurrent rows to process (default: 8)",
+        default=128,
+        help="Max concurrent rows to process (default: 128, DeepSeek optimized)",
     )
     p.add_argument(
         "--no-progress",
@@ -357,14 +357,14 @@ def build_run_parser(p: argparse.ArgumentParser) -> argparse.ArgumentParser:
     p.add_argument(
         "--min-batch",
         type=int,
-        default=1,
-        help="Min concurrency (adaptive mode, default: 1)",
+        default=8,
+        help="Min concurrency (adaptive mode, default: 8, DeepSeek optimized)",
     )
     p.add_argument(
         "--max-batch",
         type=int,
-        default=64,
-        help="Max concurrency (adaptive mode, default: 64)",
+        default=500,
+        help="Max concurrency (adaptive mode, default: 500, DeepSeek V4 Pro limit)",
     )
     p.add_argument(
         "--target-latency-ms",
@@ -375,14 +375,14 @@ def build_run_parser(p: argparse.ArgumentParser) -> argparse.ArgumentParser:
     p.add_argument(
         "--target-queue-depth",
         type=int,
-        default=32,
-        help="Target backend queue depth (default: 32)",
+        default=64,
+        help="Target backend queue depth (default: 64, DeepSeek optimized)",
     )
     p.add_argument(
         "--adaptive-reprobe-rows",
         type=int,
-        default=32,
-        help="Completed rows before adaptive mode retries --max-batch after backoff (default: 32)",
+        default=64,
+        help="Completed rows before adaptive mode retries --max-batch after backoff (default: 64)",
     )
     p.add_argument(
         "--adaptive-reprobe-seconds",
@@ -672,10 +672,10 @@ def _build_run_config(args) -> "RunConfig":
 
     # max_concurrent の解決（レガシーオプション考慮）
     max_concurrent = getattr(args, "max_concurrent_rows", None) or getattr(
-        args, "max_concurrent", 8
+        args, "max_concurrent", 128
     )
     min_concurrent = getattr(args, "min_concurrent", None) or getattr(
-        args, "min_batch", 1
+        args, "min_batch", 8
     )
 
     # metrics_type の決定
@@ -690,14 +690,14 @@ def _build_run_config(args) -> "RunConfig":
             max_concurrent=max_concurrent,
             adaptive=getattr(args, "adaptive", False),
             min_concurrent=min_concurrent,
-            max_concurrent_limit=getattr(args, "max_batch", 64),
+            max_concurrent_limit=getattr(args, "max_batch", 500),
             target_latency_ms=getattr(args, "target_latency_ms", 3000),
-            target_queue_depth=getattr(args, "target_queue_depth", 32),
+            target_queue_depth=getattr(args, "target_queue_depth", 64),
             metrics_type=metrics_type,
             adaptive_reprobe_enabled=not getattr(
                 args, "no_adaptive_reprobe", False
             ),
-            adaptive_reprobe_rows=getattr(args, "adaptive_reprobe_rows", 32),
+            adaptive_reprobe_rows=getattr(args, "adaptive_reprobe_rows", 64),
             adaptive_reprobe_seconds=getattr(args, "adaptive_reprobe_seconds", 120.0),
             enable_request_batching=getattr(args, "enable_request_batching", False),
             max_batch_size=getattr(args, "max_batch_size", 32),

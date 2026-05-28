@@ -11,22 +11,22 @@ from pydantic import BaseModel, Field
 
 
 class ConcurrencyConfig(BaseModel):
-    """並行性制御設定"""
+    """並行性制御設定（DeepSeek API 向け最適化済み）"""
 
     model_config = {"populate_by_name": True}
 
-    max_concurrent: int = 8
+    max_concurrent: int = 128           # DeepSeek V4 Pro=500, Flash=2500 に対応
     adaptive: bool = False
-    min_concurrent: int = 1
-    max_concurrent_limit: int = 64
+    min_concurrent: int = 8             # DeepSeek はウォームアップ不要、高めから開始
+    max_concurrent_limit: int = 500     # V4 Pro の上限に合わせる（Flash は 2500）
     target_latency_ms: int = 3000
-    target_queue_depth: int = 32
-    metrics_type: str = "none"  # none | vllm | sglang
+    target_queue_depth: int = 64        # DeepSeek は深いキューを効率的に処理
+    metrics_type: str = "none"
     adaptive_reprobe_enabled: bool = True
-    adaptive_reprobe_rows: int = 32
+    adaptive_reprobe_rows: int = 64     # 並列数が多いので reprobe 間隔も広げる
     adaptive_reprobe_seconds: float = 120.0
     enable_request_batching: bool = False
-    max_batch_size: int = 32
+    max_batch_size: int = 64            # DeepSeek KVキャッシュ活用のため大きめのバッチ
     max_wait_ms: int = 50
 
 
@@ -75,11 +75,11 @@ class ProfileConfig(BaseModel):
 
 
 class TransportConfig(BaseModel):
-    """HTTP トランスポート設定"""
+    """HTTP トランスポート設定（DeepSeek API 向け最適化）"""
 
     model_config = {"populate_by_name": True}
 
-    use_shared_transport: bool = False
+    use_shared_transport: bool = True   # DeepSeek 高並列ではコネクションプーリング必須
     http2: bool = True
     retry_on_empty: bool = True
 

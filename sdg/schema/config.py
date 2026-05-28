@@ -162,6 +162,8 @@ class ModelConfig(BaseModel):
     exclude_reasoning: bool = False
     # DeepSeek Chat Prefix Completion (Beta)
     use_beta_endpoint: bool = False  # base_urlを /beta に切り替え
+    # DeepSeek user_id: KVキャッシュ分離・スケジューリング分離用
+    user_id: Optional[str] = None    # [a-zA-Z0-9\-_]+ 形式、最大512文字
 
     @field_validator("api_model", "api_key", "base_url", "organization", mode="before")
     @classmethod

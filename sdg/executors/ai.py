@@ -72,6 +72,7 @@ def _build_clients(cfg: SDGConfig) -> Dict[str, LLMClient]:
             timeout_sec=timeout,
             use_shared_transport=use_shared_transport,
             http2=http2,
+            user_id=m.user_id,  # DeepSeek KV cache isolation
         )
     return clients
 

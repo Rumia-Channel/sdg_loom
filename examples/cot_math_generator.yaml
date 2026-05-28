@@ -29,9 +29,8 @@ budgets:
   wall_time_ms: 7200000
 
 # モデル設定: 環境変数で指定（DeepSeek推奨）
-#   SDG_API_MODEL=deepseek-v4-pro
-#   SDG_API_KEY=your-deepseek-api-key
-#   SDG_BASE_URL=https://api.deepseek.com
+#   SDG_API_MODEL=deepseek-v4-flash  （高速、2500並列対応）
+#   SDG_API_MODEL=deepseek-v4-pro    （高品質、500並列対応）
 models:
   - name: math_solver
     api_model: "${ENV.SDG_API_MODEL}"

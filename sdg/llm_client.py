@@ -47,6 +47,7 @@ class SharedHttpTransport:
 
     全てのLLMClientインスタンス間でHTTPコネクションプールを共有し、
     HTTP/2多重化を利用してオーバーヘッドを低減する。
+    DeepSeek API の高並列（Flash=2500, Pro=500）に対応したチューニング済み。
 
     Attributes:
         DEFAULT_MAX_CONNECTIONS: デフォルトの最大接続数
@@ -58,14 +59,14 @@ class SharedHttpTransport:
         DEFAULT_POOL_TIMEOUT: デフォルトのプールタイムアウト（秒）
     """
 
-    # デフォルト設定値
-    DEFAULT_MAX_CONNECTIONS: ClassVar[int] = 100
-    DEFAULT_MAX_KEEPALIVE_CONNECTIONS: ClassVar[int] = 50
-    DEFAULT_KEEPALIVE_EXPIRY: ClassVar[float] = 30.0
-    DEFAULT_CONNECT_TIMEOUT: ClassVar[float] = 60.0
-    DEFAULT_READ_TIMEOUT: ClassVar[float] = 3600.0  # 1 hour to avoid timeouts
+    # DeepSeek高並列向けチューニング
+    DEFAULT_MAX_CONNECTIONS: ClassVar[int] = 600       # V4 Pro 500 + 余裕
+    DEFAULT_MAX_KEEPALIVE_CONNECTIONS: ClassVar[int] = 300  # 半数を keep-alive
+    DEFAULT_KEEPALIVE_EXPIRY: ClassVar[float] = 90.0   # KVキャッシュ生存期間に合わせ長め
+    DEFAULT_CONNECT_TIMEOUT: ClassVar[float] = 30.0    # 初期接続は短め
+    DEFAULT_READ_TIMEOUT: ClassVar[float] = 900.0      # 15分（DeepSeek keep-alive最大10分 + 余裕）
     DEFAULT_WRITE_TIMEOUT: ClassVar[float] = 600.0
-    DEFAULT_POOL_TIMEOUT: ClassVar[float] = 60.0
+    DEFAULT_POOL_TIMEOUT: ClassVar[float] = 120.0      # キュー滞留時の接続待ちを許容
 
     _instance: ClassVar[Optional["SharedHttpTransport"]] = None
     _lock: ClassVar[asyncio.Lock] = asyncio.Lock()
@@ -272,9 +273,12 @@ class SharedHttpTransport:
 
 
 class BatchOptimizer:
-    """Simple adaptive concurrency controller based on latency and error rate."""
+    """Simple adaptive concurrency controller based on latency and error rate.
+    
+    DeepSeek 高並列向けにデフォルト値をチューニング。
+    """
 
-    def __init__(self, min_batch=1, max_batch=8, target_latency_ms=3000):
+    def __init__(self, min_batch=1, max_batch=128, target_latency_ms=3000):
         self.min_batch = min_batch
         self.max_batch = max_batch
         self.target_latency_ms = target_latency_ms
@@ -406,21 +410,23 @@ class LLMClient:
         use_shared_transport: bool = False,
         http2: bool = True,
         transport: Optional[SharedHttpTransport] = None,
+        user_id: Optional[str] = None,  # DeepSeek user_id for KV cache isolation
     ):
         """
         LLMClientを初期化する。
 
         Args:
-            base_url: APIのベースURL（例：http://localhost:8000）
+            base_url: APIのベースURL
             api_key: API認証キー
             organization: 組織ID（オプション）
             headers: 追加のHTTPヘッダー
             timeout_sec: リクエストタイムアウト（秒、デフォルト: 3600.0）
             use_shared_transport: 共有HTTPトランスポートを使用するかどうか
-                                  （デフォルト: False、後方互換性のため）
                                   transport引数が指定されている場合は無視される
-            http2: HTTP/2を有効にするかどうか（use_shared_transport=True時のみ有効）
+            http2: HTTP/2を有効にするかどうか
             transport: 外部から注入するSharedHttpTransportインスタンス（オプション）
+            user_id: DeepSeek user_id for KV cache isolation and scheduling isolation
+                     （[a-zA-Z0-9\\-_]+ 形式、最大512文字）
                        指定された場合、use_shared_transportの設定に関わらず
                        このtransportが使用される。上位のRunner/Executorが
                        transportのライフサイクル（作成からacloseまで）を
@@ -437,6 +443,7 @@ class LLMClient:
             self.api_root = base + "/v1"
         self.api_key = api_key
         self.organization = organization
+        self._user_id = user_id          # DeepSeek user_id for KV cache isolation
         self._http2 = http2
 
         # 注入されたtransportを保持（ライフサイクル管理は呼び出し元の責任）
@@ -564,6 +571,12 @@ class LLMClient:
         req = {k: v for k, v in payload.items() if k not in ("retry", "timeout_sec")}
         per_req_timeout = payload.get("timeout_sec", None)
 
+        # DeepSeek user_id for KV cache isolation / scheduling isolation
+        if self._user_id:
+            if "extra_body" not in req:
+                req["extra_body"] = {}
+            req["extra_body"]["user_id"] = self._user_id
+
         # 空返答リトライ用の外側ループ
         # 空返答リトライはエラーリトライとは独立して処理
         for empty_retry_count in range(
@@ -641,6 +654,17 @@ class LLMClient:
                     retryable_status = {408, 409, 429, 500, 502, 503, 504}
                     is_retryable = status in retryable_status
 
+                    # DeepSeek 429: extract Retry-After header for intelligent backoff
+                    retry_after_sec = 0
+                    if status == 429:
+                        response = getattr(e, "response", None)
+                        if response is not None:
+                            retry_after_raw = response.headers.get("Retry-After", "0")
+                            try:
+                                retry_after_sec = float(retry_after_raw)
+                            except ValueError:
+                                retry_after_sec = 0
+
                     # If status unknown, heuristic on error type/name for transient issues
                     if not is_retryable and status is None:
                         name = e.__class__.__name__.lower()
@@ -662,7 +686,11 @@ class LLMClient:
                             is_retryable = True
 
                     if is_retryable and i < attempts - 1:
-                        await asyncio.sleep(delay_ms / 1000.0)
+                        # DeepSeek 429: Retry-After header を優先、なければ exponential backoff
+                        if retry_after_sec > 0:
+                            await asyncio.sleep(retry_after_sec)
+                        else:
+                            await asyncio.sleep(delay_ms / 1000.0)
                         delay_ms = int(delay_ms * factor)
                         continue
 

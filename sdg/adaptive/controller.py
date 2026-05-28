@@ -337,7 +337,7 @@ class AdaptiveController:
         min_concurrency: int = 1,
         max_concurrency: int = 64,
         target_latency_ms: float = 2000.0,
-        target_queue_depth: int = 32,
+        target_queue_depth: int = 64,
         # AIMD parameters - 非常にアグレッシブな設定
         increase_step: int = 5,  # Additive increase per adjustment (CA phase) - 非常に積極的に増加
         decrease_factor: float = 0.5,  # Multiplicative decrease factor (for errors) - 元の値に戻す
@@ -370,7 +370,7 @@ class AdaptiveController:
             min_concurrency: Minimum concurrency level (default: 1)
             max_concurrency: Maximum concurrency level (default: 64)
             target_latency_ms: Target P95 latency in milliseconds (default: 2000)
-            target_queue_depth: Target backend queue depth (default: 32)
+            target_queue_depth: Target backend queue depth (default: 64, DeepSeek optimized)
             increase_step: Additive increase per adjustment cycle (default: 2)
             decrease_factor: Multiplicative decrease factor for errors (default: 0.5)
             latency_tolerance: Latency threshold multiplier for decrease (default: 1.5)
@@ -1247,7 +1247,7 @@ class AdaptiveConcurrencyManager:
         min_concurrency: int = 1,
         max_concurrency: int = 64,
         target_latency_ms: float = 2000.0,
-        target_queue_depth: int = 32,
+        target_queue_depth: int = 64,
         enabled: bool = True,
     ):
         """
