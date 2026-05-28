@@ -13,22 +13,20 @@ class LLMCallResult:
     """LLM呼び出し結果"""
     content: Optional[str]
     error: Optional[Exception]
-    latency_ms: int
+    latency_ms: int             # TTFB: 最初のトークン到達までの時間（ストリーミング計測）
     prompt_tokens: int = 0
     completion_tokens: int = 0
     total_tokens: int = 0
-    reasoning: Optional[str] = None  # Reasoning思考プロセス
-    cache_hit_tokens: int = 0   # DeepSeek KVキャッシュヒットトークン数
-    cache_miss_tokens: int = 0  # DeepSeek KVキャッシュミストークン数
+    reasoning: Optional[str] = None
+    cache_hit_tokens: int = 0
+    cache_miss_tokens: int = 0
 
     @property
     def success(self) -> bool:
-        """成功したかどうか"""
         return self.error is None
 
     @property
     def cache_hit_rate(self) -> float:
-        """キャッシュヒット率"""
         total = self.cache_hit_tokens + self.cache_miss_tokens
         if total == 0:
             return 0.0
@@ -545,90 +543,96 @@ class LLMClient:
         retry_cfg: Dict[str, Any] | None = None,
     ) -> LLMCallResult:
         """
-        単一のチャット呼び出しを実行する。
+        単一のチャット呼び出しをストリーミングで実行する。
+
+        DeepSeek API との通信は常にストリーミングモードを使用し、
+        TTFB (Time To First Byte) をレイテンシとして計測する。
+        これにより全生成時間の変動に影響されず、純粋なサーバ応答性を
+        輻輳制御に反映できる。
 
         Args:
             payload: リクエストペイロード
             retry_cfg: リトライ設定
 
         Returns:
-            LLMCallResult: 呼び出し結果（コンテンツ、エラー、レイテンシ、トークン使用量）
+            LLMCallResult: 呼び出し結果
         """
         t0 = now_ms()
-        # デフォルトのリトライ回数を増やしてタイムアウトエラーへの耐性を高める
         attempts = int((retry_cfg or {}).get("max_attempts", 10))
         backoff = (retry_cfg or {}).get("backoff", {})
-        initial_delay_ms = int(
-            backoff.get("initial_ms", 1000)
-        )  # 初期待機時間も少し増やす
+        initial_delay_ms = int(backoff.get("initial_ms", 1000))
         factor = float(backoff.get("factor", 2.0))
-        # 空返答リトライ機能（デフォルト: 有効）
         retry_on_empty = (retry_cfg or {}).get("retry_on_empty", True)
         max_empty_retries = int((retry_cfg or {}).get("max_empty_retries", 3))
 
-        # Remove internal keys not supported by the SDK API
-        # Note: extra_body は SDK がサポートするので残す
         req = {k: v for k, v in payload.items() if k not in ("retry", "timeout_sec")}
         per_req_timeout = payload.get("timeout_sec", None)
 
-        # DeepSeek user_id for KV cache isolation / scheduling isolation
         if self._user_id:
             if "extra_body" not in req:
                 req["extra_body"] = {}
             req["extra_body"]["user_id"] = self._user_id
 
-        # 空返答リトライ用の外側ループ
-        # 空返答リトライはエラーリトライとは独立して処理
         for empty_retry_count in range(
             max(1, max_empty_retries) if retry_on_empty else 1
         ):
             delay_ms = initial_delay_ms
 
-            # エラーリトライ用の内側ループ
             for i in range(max(1, attempts)):
                 try:
-                    resp = await self.client.chat.completions.create(
+                    stream = await self.client.chat.completions.create(
                         **req,
-                        # pass through any additional vendor-specific headers if needed
+                        stream=True,
+                        stream_options={"include_usage": True},
                         extra_headers=(
                             self.extra_headers if self.extra_headers else None
                         ),
                         timeout=per_req_timeout or self.timeout,
                     )
-                    content = resp.choices[0].message.content
 
-                    # Reasoning抽出
-                    # OpenAI SDK v2ではreasoningフィールドが標準model_fieldsにないため、
-                    # 複数のソースから取得を試みる
-                    reasoning = _extract_reasoning(resp.choices[0].message)
-
-                    # トークン使用量を抽出
+                    content_parts: list[str] = []
+                    reasoning_parts: list[str] = []
                     prompt_tokens = 0
                     completion_tokens = 0
                     total_tokens = 0
                     cache_hit_tokens = 0
                     cache_miss_tokens = 0
-                    if hasattr(resp, "usage") and resp.usage is not None:
-                        prompt_tokens = getattr(resp.usage, "prompt_tokens", 0) or 0
-                        completion_tokens = getattr(resp.usage, "completion_tokens", 0) or 0
-                        total_tokens = getattr(resp.usage, "total_tokens", 0) or 0
-                        # DeepSeek KVキャッシュヒット/ミス
-                        cache_hit_tokens = getattr(resp.usage, "prompt_cache_hit_tokens", 0) or 0
-                        cache_miss_tokens = getattr(resp.usage, "prompt_cache_miss_tokens", 0) or 0
+                    ttfb_ms = 0
 
-                    # 空返答チェック: contentがNone、空文字列、またはwhitespaceのみの場合
-                    # ただし、reasoningに内容がある場合は空返答とみなさない
+                    async for chunk in stream:
+                        if ttfb_ms == 0:
+                            ttfb_ms = now_ms() - t0
+
+                        delta = chunk.choices[0].delta if chunk.choices else None
+                        if delta:
+                            if delta.content:
+                                content_parts.append(delta.content)
+                            rc = getattr(delta, "reasoning_content", None)
+                            if rc:
+                                reasoning_parts.append(rc)
+
+                        if hasattr(chunk, "usage") and chunk.usage is not None:
+                            prompt_tokens = getattr(chunk.usage, "prompt_tokens", 0) or 0
+                            completion_tokens = getattr(chunk.usage, "completion_tokens", 0) or 0
+                            total_tokens = getattr(chunk.usage, "total_tokens", 0) or 0
+                            cache_hit_tokens = getattr(chunk.usage, "prompt_cache_hit_tokens", 0) or 0
+                            cache_miss_tokens = getattr(chunk.usage, "prompt_cache_miss_tokens", 0) or 0
+
+                    content = "".join(content_parts) if content_parts else None
+                    reasoning = "".join(reasoning_parts) if reasoning_parts else None
+
+                    if ttfb_ms == 0:
+                        ttfb_ms = now_ms() - t0  # 空レスポンスのフォールバック
+
                     if retry_on_empty and (content is None or not content.strip()) and not reasoning:
-                        # まだ空返答リトライ回数が残っている場合はリトライ
                         if empty_retry_count < max_empty_retries - 1:
                             await asyncio.sleep(delay_ms / 1000.0)
                             delay_ms = int(delay_ms * factor)
-                            break  # 内側ループを抜けて外側ループで再試行
-                        # max_empty_retriesを超えた場合はそのまま返す（エラーにはしない）
+                            break
                         return LLMCallResult(
                             content=content,
                             error=None,
-                            latency_ms=now_ms() - t0,
+                            latency_ms=ttfb_ms,
                             prompt_tokens=prompt_tokens,
                             completion_tokens=completion_tokens,
                             total_tokens=total_tokens,
@@ -640,7 +644,7 @@ class LLMClient:
                     return LLMCallResult(
                         content=content,
                         error=None,
-                        latency_ms=now_ms() - t0,
+                        latency_ms=ttfb_ms,
                         prompt_tokens=prompt_tokens,
                         completion_tokens=completion_tokens,
                         total_tokens=total_tokens,
@@ -649,12 +653,10 @@ class LLMClient:
                         cache_miss_tokens=cache_miss_tokens,
                     )
                 except Exception as e:
-                    # Try to classify retryable errors similar to original logic
                     status = getattr(e, "status_code", None)
                     retryable_status = {408, 409, 429, 500, 502, 503, 504}
                     is_retryable = status in retryable_status
 
-                    # DeepSeek 429: extract Retry-After header for intelligent backoff
                     retry_after_sec = 0
                     if status == 429:
                         response = getattr(e, "response", None)
@@ -665,7 +667,6 @@ class LLMClient:
                             except ValueError:
                                 retry_after_sec = 0
 
-                    # If status unknown, heuristic on error type/name for transient issues
                     if not is_retryable and status is None:
                         name = e.__class__.__name__.lower()
                         msg = str(e).lower()
@@ -686,7 +687,6 @@ class LLMClient:
                             is_retryable = True
 
                     if is_retryable and i < attempts - 1:
-                        # DeepSeek 429: Retry-After header を優先、なければ exponential backoff
                         if retry_after_sec > 0:
                             await asyncio.sleep(retry_after_sec)
                         else:
@@ -700,10 +700,7 @@ class LLMClient:
                         latency_ms=now_ms() - t0,
                     )
             else:
-                # 内側ループが正常に完了した場合（breakで抜けなかった場合）
-                # これはエラーリトライが尽きた場合
                 continue
-            # breakで抜けた場合（空返答リトライ）は外側ループを続行
 
         return LLMCallResult(
             content=None,
