@@ -120,9 +120,31 @@ class AdaptiveScheduler:
             reprobe_enabled=self._reprobe_enabled,
             reprobe_interval_rows=self._reprobe_rows,
             reprobe_interval_seconds=self._reprobe_seconds,
+            provider=self._resolve_provider(),
         )
         self._controller = controller
 
+    def _resolve_provider(self):
+        """Provider を解決する.
+
+        AdaptiveScheduler は PipelineEngine から呼ばれた直後に動くため、
+        グローバル PipelineEngine 状態は使わない。代わりに env 変数から解決する。
+        互換性維持のため、未指定 / 失敗時は None を返す (DeepSeek 既定で動く)。
+        """
+        try:
+            from ..providers import resolve_provider_name, get_provider
+            return get_provider(resolve_provider_name())
+        except Exception:
+            return None
+
+    async def schedule(  # type: ignore[no-redef]
+        self,
+        dataset: Iterable,
+        task_factory: Callable[[int, dict], Awaitable[StreamingResult]],
+        skip_indices: Set[int],
+        cfg: Any = None,
+        clients: Any = None,
+    ) -> AsyncIterator[StreamingResult]:
         # メトリクスコレクター（vllm / sglang オプション）
         metrics_collector: Optional[Any] = None
         if self._metrics_type != "none" and cfg is not None:

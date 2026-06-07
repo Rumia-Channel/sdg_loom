@@ -338,7 +338,7 @@ class AdaptiveController:
         max_concurrency: int = 64,
         target_latency_ms: float = 2000.0,
         target_queue_depth: int = 64,
-        # AIMD parameters - DeepSeek API 向け調整
+        # AIMD parameters (Provider 駆動の既定値を上書きしたいときのみ指定)
         increase_step: int = 10,  # Additive increase per adjustment (CA phase) - 積極的増加
         decrease_factor: float = 0.5,  # Multiplicative decrease factor (for severe congestion)
         # Adjustment sensitivity
@@ -364,6 +364,9 @@ class AdaptiveController:
         reprobe_interval_seconds: float = 60.0,  # 1分で再プローブ
         # DeepSeek 固有: リカバリー時の最小並列数を高く保つ
         recovery_floor: int = 8,  # 縮退してもこれ以下には下げない（DeepSeekは余裕がある）
+        # Provider を渡すと、上記の数値パラメータを Provider 定義で上書きする。
+        # 既存コードは引数互換のため Provider 未指定でも動く。
+        provider: Optional["Provider"] = None,  # type: ignore[name-defined]
     ):
         """
         Initialize the adaptive controller.
@@ -414,7 +417,19 @@ class AdaptiveController:
         self.reprobe_enabled = reprobe_enabled
         self.reprobe_interval_rows = max(1, reprobe_interval_rows)
         self.reprobe_interval_seconds = max(0.0, reprobe_interval_seconds)
-        self.recovery_floor = max(min_concurrency, recovery_floor)  # DeepSeek: 縮退下限
+
+        # Provider 指定があれば、AIMD の数値パラメータを Provider 定義で上書きする。
+        if provider is not None:
+            self.increase_step = provider.adaptive_increase_step
+            self.decrease_factor = provider.adaptive_decrease_factor
+            self.error_rate_threshold = provider.adaptive_error_rate_threshold
+            self.mild_decrease_factor = provider.adaptive_mild_decrease_factor
+            # recovery_floor も Provider 定義があれば上書き
+            self.recovery_floor = max(
+                min_concurrency, provider.adaptive_recovery_floor
+            )
+        else:
+            self.recovery_floor = max(min_concurrency, recovery_floor)  # DeepSeek: 縮退下限
 
         # State - Start with slow start from initial_concurrency or a reasonable default
         if initial_concurrency is not None:

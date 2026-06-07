@@ -1,0 +1,46 @@
+provider: minimax
+region: cn    # ← cn (中国本土: api.minimaxi.com) / global (api.minimax.io) を切替可
+
+mabel:
+  version: "2.0"
+  id: "com.example.agent.minimax_demo"
+  name: "MiniMax Demo"
+  description: "Demonstrates provider abstraction with MiniMax M3 (China region)."
+
+# グローバル変数
+globals:
+  const:
+    APP_NAME: "SDG-LOOM via MiniMax"
+  vars:
+    counter: 0
+
+models:
+  # region=cn / global いずれでも api_model の既定値は MiniMax M3。
+  # 明示的に上書きも可能。
+  - name: m3
+    api_model: MiniMax M3
+    api_key: "${ENV.MINIMAX_API_KEY}"
+    request_defaults:
+      temperature: 0.3
+      max_tokens: 600
+
+blocks:
+  - type: ai
+    exec: 1
+    id: analyze
+    model: m3
+    system_prompt: |
+      You are a helpful assistant. App: {APP_NAME}
+    prompts:
+      - |
+        次の入力を 3 つの要点に要約してください:
+        {UserInput}
+    outputs:
+      - name: Analysis
+        select: full
+
+  - type: end
+    exec: 10
+    final:
+      - name: result
+        value: "{Analysis}"

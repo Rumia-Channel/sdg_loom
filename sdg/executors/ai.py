@@ -6,6 +6,13 @@ from typing import Any, Dict, List, Optional
 from ..config import AIBlock, SDGConfig, OutputDef
 from ..llm_client import LLMClient, LLMCallResult
 from ..profiler import ProfileCollector
+from ..providers import (
+    DEFAULT_PROVIDER_NAME,
+    Provider,
+    get_provider,
+    resolve_provider_name,
+    resolve_region,
+)
 from ..utils import (
     render_template,
     has_image_placeholders,
@@ -21,11 +28,11 @@ _ENV_REF_RE = re.compile(r"^\$\{ENV\.([^}]+)\}$")
 
 
 def _resolve_required_env_ref(
-    value: Optional[str],
+    value: Any,
     *,
     model_name: str,
     field: str,
-) -> Optional[str]:
+) -> Any:
     """実行時モデル設定に残った ${ENV.NAME} を解決し、未設定なら明示的に失敗する。"""
     if not isinstance(value, str):
         return value
@@ -44,13 +51,32 @@ def _resolve_required_env_ref(
     return resolved
 
 
+def _resolve_provider_for_cfg(cfg: SDGConfig) -> tuple[Provider, str]:
+    """SDGConfig から Provider と region を解決する (YAML / env ベース).
+
+    CLI 値は PipelineEngine 側で `cfg.provider` / `cfg.region` に書き戻される
+    ため、ここでは YAML と環境変数だけを見る。
+    """
+    provider_name = resolve_provider_name(yaml_value=cfg.provider)
+    provider = get_provider(provider_name)
+    region = resolve_region(provider, yaml_value=cfg.region)
+    return provider, region
+
+
 def _build_clients(cfg: SDGConfig) -> Dict[str, LLMClient]:
-    """モデルクライアントを構築"""
+    """モデルクライアントを構築.
+
+    Provider 抽象を経由して base_url / api_key / user_id の既定値を解決する。
+    YAML / env で ${ENV.NAME} 形式の場合は既存の動作 (環境変数解決) を維持。
+    """
     clients: Dict[str, LLMClient] = {}
 
     # 最適化オプションの取得
     use_shared_transport = cfg.optimization.get("use_shared_transport", False)
     http2 = cfg.optimization.get("http2", True)
+
+    provider, region = _resolve_provider_for_cfg(cfg)
+    default_base_url = provider.base_url_for(region)
 
     for m in cfg.models:
         api_key = _resolve_required_env_ref(
@@ -58,11 +84,12 @@ def _build_clients(cfg: SDGConfig) -> Dict[str, LLMClient]:
             model_name=m.name,
             field="api_key",
         )
+        # base_url が ${ENV.NAME} 形式なら解決を試み、未設定なら Provider 既定。
         base_url = _resolve_required_env_ref(
             m.base_url,
             model_name=m.name,
             field="base_url",
-        ) or "https://api.deepseek.com"
+        ) or default_base_url
         timeout = (m.request_defaults or {}).get("timeout_sec")
         clients[m.name] = LLMClient(
             base_url=base_url,
@@ -72,7 +99,8 @@ def _build_clients(cfg: SDGConfig) -> Dict[str, LLMClient]:
             timeout_sec=timeout,
             use_shared_transport=use_shared_transport,
             http2=http2,
-            user_id=m.user_id,  # DeepSeek KV cache isolation
+            # Provider が user_id によるセッション分離をサポートする場合のみ渡す
+            user_id=m.user_id if provider.supports_user_id else None,
         )
     return clients
 
@@ -228,27 +256,34 @@ async def _execute_ai_block_single(
     req_params = dict((model_def.request_defaults or {}))
     req_params.update(block.params or {})
 
+    # Provider 解決 (thinking モード設定で参照)
+    provider, region = _resolve_provider_for_cfg(cfg)
+
     # v2: JSONモード
     if block.mode == "json":
         req_params["response_format"] = {"type": "json_object"}
 
-    # v2: Reasoningモード (DeepSeek thinking mode)
-    # DeepSeek は extra_body={"thinking": {"type": "enabled"}} でthinking modeを有効化
-    # reasoning_effort パラメータで思考の深さを制御 (high/max)
-    # レスポンスは reasoning_content フィールドに思考プロセスが返る
-    if model_def.enable_reasoning:
-        # DeepSeek thinking mode: extra_bodyにthinking設定
-        if "extra_body" not in req_params:
-            req_params["extra_body"] = {}
-
-        thinking_config = {"type": "enabled"}
-        req_params["extra_body"]["thinking"] = thinking_config
-
-        # reasoning_effort: 思考深度の制御
-        if model_def.reasoning_effort:
-            req_params["reasoning_effort"] = model_def.reasoning_effort
-
-        # thinking modeではtemperature等は無効（設定しても無視される）
+    # v2: Reasoningモード (Provider ごとに有効化方法が異なる)
+    # - DeepSeek: extra_body={"thinking": {"type": "enabled"}} + reasoning_effort
+    # - OpenAI o1 系: reasoning_effort パラメータ (extra_body 不要)
+    if model_def.enable_reasoning and provider.supports_thinking:
+        if provider.thinking_mode_kind == "deepseek_extra_body":
+            if "extra_body" not in req_params:
+                req_params["extra_body"] = {}
+            req_params["extra_body"]["thinking"] = {"type": "enabled"}
+            # reasoning_effort: 思考深度の制御 (Model 個別指定 > Provider 既定)
+            effort = model_def.reasoning_effort or provider.extra_thinking_kwargs.get(
+                "reasoning_effort"
+            )
+            if effort:
+                req_params["reasoning_effort"] = effort
+        elif provider.thinking_mode_kind == "openai_reasoning_effort":
+            effort = model_def.reasoning_effort or provider.extra_thinking_kwargs.get(
+                "reasoning_effort"
+            )
+            if effort:
+                req_params["reasoning_effort"] = effort
+        # else: サポート外。req_params はそのまま。
 
     # 単一チャット呼び出し
     retry_cfg = dict(req_params.get("retry") or {})

@@ -7,27 +7,78 @@ from __future__ import annotations
 
 from typing import Dict, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
-class ConcurrencyConfig(BaseModel):
-    """並行性制御設定（DeepSeek API 向け最適化済み）"""
+class ProviderConfig(BaseModel):
+    """プロバイダー / リージョン設定
+
+    CLI フラグや環境変数から PipelineEngine が解決した値をここに格納する。
+    解決前の状態 (None) では Provider 既定値が使われる。
+    """
 
     model_config = {"populate_by_name": True}
 
-    max_concurrent: int = 128           # DeepSeek V4 Pro=500, Flash=2500 に対応
+    name: Optional[str] = None  # CLI / 環境変数 / YAML で上書きされ得る
+    region: Optional[str] = None  # 解決後のリージョン (cn / global)
+
+
+class ConcurrencyConfig(BaseModel):
+    """並行性制御設定
+
+    Provider ごとに既定値が異なるフィールドは default=None とし、
+    RunConfig.apply_provider_defaults() で Provider 既定を適用する。
+    """
+
+    model_config = {"populate_by_name": True}
+
+    # Provider 駆動のフィールド (None = 未確定 → apply_provider_defaults() で埋める)
+    max_concurrent: Optional[int] = None
+    min_concurrent: Optional[int] = None
+    max_concurrent_limit: Optional[int] = None
+    target_latency_ms: Optional[int] = None
+    target_queue_depth: Optional[int] = None
+    max_batch_size: Optional[int] = None
+
+    # Provider 非依存のフィールド
     adaptive: bool = False
-    min_concurrent: int = 8             # DeepSeek はウォームアップ不要、高めから開始
-    max_concurrent_limit: int = 500     # V4 Pro の上限に合わせる（Flash は 2500）
-    target_latency_ms: int = 3000
-    target_queue_depth: int = 64        # DeepSeek は深いキューを効率的に処理
     metrics_type: str = "none"
     adaptive_reprobe_enabled: bool = True
-    adaptive_reprobe_rows: int = 64     # 並列数が多いので reprobe 間隔も広げる
+    adaptive_reprobe_rows: int = 64
     adaptive_reprobe_seconds: float = 120.0
     enable_request_batching: bool = False
-    max_batch_size: int = 64            # DeepSeek KVキャッシュ活用のため大きめのバッチ
     max_wait_ms: int = 50
+
+    @model_validator(mode="before")
+    @classmethod
+    def _legacy_compat(cls, data):
+        """後方互換: 旧来の default_factory 形式の呼び出しを許容する。
+
+        pydantic 経由で dict / keyword 構築する想定。None フィールドは
+        RunConfig.apply_provider_defaults() が埋める。
+        """
+        if isinstance(data, dict):
+            # 全フィールドが None なら default_factory の戻り値に揃えておく
+            # (直接 ConcurrencyConfig() を生成したケース)
+            if all(data.get(k) is None for k in (
+                "max_concurrent", "min_concurrent", "max_concurrent_limit",
+                "target_latency_ms", "target_queue_depth", "max_batch_size",
+            )):
+                from ._provider_defaults import (
+                    provider_max_concurrent_default,
+                    provider_min_concurrent_default,
+                    provider_max_concurrent_limit_default,
+                    provider_target_latency_ms_default,
+                    provider_target_queue_depth_default,
+                    provider_max_batch_size_default,
+                )
+                data.setdefault("max_concurrent", provider_max_concurrent_default())
+                data.setdefault("min_concurrent", provider_min_concurrent_default())
+                data.setdefault("max_concurrent_limit", provider_max_concurrent_limit_default())
+                data.setdefault("target_latency_ms", provider_target_latency_ms_default())
+                data.setdefault("target_queue_depth", provider_target_queue_depth_default())
+                data.setdefault("max_batch_size", provider_max_batch_size_default())
+        return data
 
 
 class IOConfig(BaseModel):
@@ -75,11 +126,11 @@ class ProfileConfig(BaseModel):
 
 
 class TransportConfig(BaseModel):
-    """HTTP トランスポート設定（DeepSeek API 向け最適化）"""
+    """HTTP トランスポート設定"""
 
     model_config = {"populate_by_name": True}
 
-    use_shared_transport: bool = True   # DeepSeek 高並列ではコネクションプーリング必須
+    use_shared_transport: bool = True
     http2: bool = True
     retry_on_empty: bool = True
 
@@ -101,6 +152,7 @@ class RunConfig(BaseModel):
 
     model_config = {"populate_by_name": True}
 
+    provider: ProviderConfig = Field(default_factory=ProviderConfig)
     concurrency: ConcurrencyConfig = Field(default_factory=ConcurrencyConfig)
     io: IOConfig = Field(default_factory=IOConfig)
     resume: ResumeConfig = Field(default_factory=ResumeConfig)
@@ -112,6 +164,24 @@ class RunConfig(BaseModel):
     show_progress: bool = True
     verbose: bool = False
 
+    def apply_provider_defaults(self, provider) -> None:
+        """ConcurrencyConfig の None フィールドに Provider 既定値を適用する。
+
+        ユーザー指定済みのフィールド (None 以外) は上書きしない。
+        """
+        if self.concurrency.max_concurrent is None:
+            self.concurrency.max_concurrent = provider.max_concurrent_default
+        if self.concurrency.min_concurrent is None:
+            self.concurrency.min_concurrent = provider.min_concurrent_default
+        if self.concurrency.max_concurrent_limit is None:
+            self.concurrency.max_concurrent_limit = provider.max_concurrent_limit_default
+        if self.concurrency.target_latency_ms is None:
+            self.concurrency.target_latency_ms = provider.target_latency_ms_default
+        if self.concurrency.target_queue_depth is None:
+            self.concurrency.target_queue_depth = provider.target_queue_depth_default
+        if self.concurrency.max_batch_size is None:
+            self.concurrency.max_batch_size = provider.max_batch_size_default
+
 
 __all__ = [
     "ConcurrencyConfig",
@@ -121,5 +191,6 @@ __all__ = [
     "ProfileConfig",
     "TransportConfig",
     "DataSourceConfig",
+    "ProviderConfig",
     "RunConfig",
 ]

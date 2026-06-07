@@ -275,6 +275,29 @@ def build_run_parser(p: argparse.ArgumentParser) -> argparse.ArgumentParser:
         "--save-intermediate", action="store_true", help="Save intermediate outputs"
     )
 
+    # Provider options (resolve by CLI > env > YAML > default)
+    from .providers import list_providers, ALL_REGIONS
+
+    p.add_argument(
+        "--provider",
+        choices=list_providers(),
+        default=None,
+        help=(
+            "LLM provider name. Available: "
+            + ", ".join(list_providers())
+            + ". Can also be set via SDG_PROVIDER env var or YAML 'provider:'"
+        ),
+    )
+    p.add_argument(
+        "--region",
+        choices=list(ALL_REGIONS),
+        default=None,
+        help=(
+            "Region for multi-region providers (e.g. minimax: cn|global). "
+            "Can also be set via SDG_REGION env var or YAML 'region:'"
+        ),
+    )
+
     # Data limit options
     p.add_argument(
         "--max-inputs",
@@ -322,8 +345,11 @@ def build_run_parser(p: argparse.ArgumentParser) -> argparse.ArgumentParser:
     p.add_argument(
         "--max-concurrent",
         type=int,
-        default=128,
-        help="Max concurrent rows to process (default: 128, DeepSeek optimized)",
+        default=None,
+        help=(
+            "Max concurrent rows to process. "
+            "省略時は Provider 既定値 (DeepSeek=128, MiniMax=64)"
+        ),
     )
     p.add_argument(
         "--no-progress",
@@ -357,26 +383,38 @@ def build_run_parser(p: argparse.ArgumentParser) -> argparse.ArgumentParser:
     p.add_argument(
         "--min-batch",
         type=int,
-        default=8,
-        help="Min concurrency (adaptive mode, default: 8, DeepSeek optimized)",
+        default=None,
+        help=(
+            "Min concurrency (adaptive mode). "
+            "省略時は Provider 既定値 (DeepSeek=8, MiniMax=4)"
+        ),
     )
     p.add_argument(
         "--max-batch",
         type=int,
-        default=500,
-        help="Max concurrency (adaptive mode, default: 500, DeepSeek V4 Pro limit)",
+        default=None,
+        help=(
+            "Max concurrency (adaptive mode). "
+            "省略時は Provider 既定値 (DeepSeek=500, MiniMax=200)"
+        ),
     )
     p.add_argument(
         "--target-latency-ms",
         type=int,
-        default=3000,
-        help="Target P95 latency in ms (default: 3000)",
+        default=None,
+        help=(
+            "Target P95 latency in ms. "
+            "省略時は Provider 既定値 (DeepSeek=3000, MiniMax=4000)"
+        ),
     )
     p.add_argument(
         "--target-queue-depth",
         type=int,
-        default=64,
-        help="Target backend queue depth (default: 64, DeepSeek optimized)",
+        default=None,
+        help=(
+            "Target backend queue depth. "
+            "省略時は Provider 既定値 (DeepSeek=64, MiniMax=32)"
+        ),
     )
     p.add_argument(
         "--adaptive-reprobe-rows",
@@ -417,8 +455,11 @@ def build_run_parser(p: argparse.ArgumentParser) -> argparse.ArgumentParser:
     p.add_argument(
         "--max-batch-size",
         type=int,
-        default=32,
-        help="Max requests per batch (default: 32)",
+        default=None,
+        help=(
+            "Max requests per batch. "
+            "省略時は Provider 既定値 (DeepSeek=64, MiniMax=32)"
+        ),
     )
     p.add_argument(
         "--max-wait-ms",
@@ -649,6 +690,38 @@ def _execute_test_run(args):
         sys.exit(1)
 
 
+def _apply_yaml_provider_to_run_config(cfg, run_config) -> None:
+    """YAML の provider / region を RunConfig.provider に反映する。
+
+    RunConfig.concurrency には None を残し、PipelineEngine.run 内で
+    Provider 解決後に RunConfig.apply_provider_defaults() で埋める。
+    """
+    from .providers import (
+        resolve_provider_name,
+        resolve_region,
+        get_provider,
+    )
+
+    yaml_provider = getattr(cfg, "provider", None)
+    yaml_region = getattr(cfg, "region", None)
+
+    # 解決済み Provider (CLI > env > YAML > 既定)
+    effective_name = resolve_provider_name(
+        cli_value=run_config.provider.name,
+        yaml_value=yaml_provider,
+    )
+    provider = get_provider(effective_name)
+    effective_region = resolve_region(
+        provider,
+        cli_value=run_config.provider.region,
+        yaml_value=yaml_region,
+    )
+
+    # RunConfig に書き戻し (PipelineEngine._resolve_provider() と重複するが無害)
+    run_config.provider.name = provider.name
+    run_config.provider.region = effective_region
+
+
 def _build_run_config(args) -> "RunConfig":
     """argparse の Namespace から RunConfig を構築"""
     from .pipeline.run_config import (
@@ -658,6 +731,7 @@ def _build_run_config(args) -> "RunConfig":
         ResumeConfig,
         MemoryConfig,
         ProfileConfig,
+        ProviderConfig,
         TransportConfig,
         DataSourceConfig,
     )
@@ -670,12 +744,14 @@ def _build_run_config(args) -> "RunConfig":
                 k, v = m.split(":", 1)
                 mapping[k] = v
 
-    # max_concurrent の解決（レガシーオプション考慮）
-    max_concurrent = getattr(args, "max_concurrent_rows", None) or getattr(
-        args, "max_concurrent", 128
+    # max_concurrent の解決 (レガシーオプション考慮)
+    max_concurrent = (
+        getattr(args, "max_concurrent_rows", None)
+        or getattr(args, "max_concurrent", None)
     )
-    min_concurrent = getattr(args, "min_concurrent", None) or getattr(
-        args, "min_batch", 8
+    min_concurrent = (
+        getattr(args, "min_concurrent", None)
+        or getattr(args, "min_batch", None)
     )
 
     # metrics_type の決定
@@ -685,14 +761,23 @@ def _build_run_config(args) -> "RunConfig":
     elif getattr(args, "use_sglang_metrics", False):
         metrics_type = "sglang"
 
+    # ProviderConfig 構築 (CLI > env > YAML > 既定)
+    provider_cfg = ProviderConfig(
+        name=getattr(args, "provider", None),
+        region=getattr(args, "region", None),
+    )
+
     return RunConfig(
+        provider=provider_cfg,
         concurrency=ConcurrencyConfig(
+            # Provider 駆動のフィールドは None のまま残す
+            # → PipelineEngine.run() で apply_provider_defaults() が埋める
             max_concurrent=max_concurrent,
             adaptive=getattr(args, "adaptive", False),
             min_concurrent=min_concurrent,
-            max_concurrent_limit=getattr(args, "max_batch", 500),
-            target_latency_ms=getattr(args, "target_latency_ms", 3000),
-            target_queue_depth=getattr(args, "target_queue_depth", 64),
+            max_concurrent_limit=getattr(args, "max_batch", None),
+            target_latency_ms=getattr(args, "target_latency_ms", None),
+            target_queue_depth=getattr(args, "target_queue_depth", None),
             metrics_type=metrics_type,
             adaptive_reprobe_enabled=not getattr(
                 args, "no_adaptive_reprobe", False
@@ -700,7 +785,7 @@ def _build_run_config(args) -> "RunConfig":
             adaptive_reprobe_rows=getattr(args, "adaptive_reprobe_rows", 64),
             adaptive_reprobe_seconds=getattr(args, "adaptive_reprobe_seconds", 120.0),
             enable_request_batching=getattr(args, "enable_request_batching", False),
-            max_batch_size=getattr(args, "max_batch_size", 32),
+            max_batch_size=getattr(args, "max_batch_size", None),
             max_wait_ms=getattr(args, "max_wait_ms", 50),
         ),
         io=IOConfig(),
@@ -814,6 +899,8 @@ def _execute_run(args):
     try:
         cfg = load_config(args.yaml)
         run_config = _build_run_config(args)
+        # YAML 側の provider / region を RunConfig に反映 (CLI 優先を維持)
+        _apply_yaml_provider_to_run_config(cfg, run_config)
         engine = PipelineEngine(cfg, run_config)
         report = engine.run(args.output)
         if getattr(report, "interrupted", False):

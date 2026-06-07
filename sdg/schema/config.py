@@ -355,6 +355,9 @@ class SDGConfig(BaseModel):
     images: List[ImageDef] = Field(default_factory=list)
     blocks: List[BlockBase] = Field(default_factory=list)
     connections: List[Connection] = Field(default_factory=list)
+    # プロバイダー設定 (YAML で provider: / region: を指定可能)
+    provider: Optional[str] = None
+    region: Optional[str] = None
     # 実行時に外部から設定される最適化オプション
     optimization: Dict[str, Any] = Field(default_factory=dict)
 
@@ -382,6 +385,43 @@ class SDGConfig(BaseModel):
     def is_v2(self) -> bool:
         """v2 仕様かどうか（v2.1 も含む）"""
         return self.get_version().startswith("2.")
+
+    # ------------------------------------------------------------------
+    # プロバイダー解決ヘルパー
+    # ------------------------------------------------------------------
+
+    def resolve_provider(
+        self,
+        *,
+        cli_provider: Optional[str] = None,
+        cli_region: Optional[str] = None,
+    ):
+        """YAML + 環境変数 + CLI の優先順でプロバイダーを解決する。
+
+        Args:
+            cli_provider: --provider フラグの値
+            cli_region: --region フラグの値
+
+        Returns:
+            (Provider, region) のタプル
+        """
+        from ..providers import (
+            resolve_provider_name,
+            resolve_region,
+            get_provider,
+        )
+
+        provider_name = resolve_provider_name(
+            cli_value=cli_provider,
+            yaml_value=self.provider,
+        )
+        provider = get_provider(provider_name)
+        region = resolve_region(
+            provider,
+            cli_value=cli_region,
+            yaml_value=self.region,
+        )
+        return provider, region
 
     # ------------------------------------------------------------------
     # ファクトリ
@@ -456,6 +496,8 @@ class SDGConfig(BaseModel):
             images=images,
             blocks=blocks,
             connections=connections,
+            provider=data.get("provider"),
+            region=data.get("region"),
         )
 
         # 基本検証

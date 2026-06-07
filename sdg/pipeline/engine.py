@@ -140,6 +140,43 @@ class PipelineEngine:
             "retry_on_empty": tr_cfg.retry_on_empty,
         }
 
+    def _resolve_provider(self) -> tuple[Any, str]:
+        """RunConfig.provider / env / YAML / CLI の優先順でプロバイダーを解決し、
+        cfg.provider / cfg.region に書き戻す (AI executor から参照される)。
+
+        同時に RunConfig.apply_provider_defaults() で ConcurrencyConfig の
+        None フィールドに Provider 既定値を適用する。
+        """
+        from ..providers import (
+            resolve_provider_name,
+            resolve_region,
+            get_provider,
+        )
+
+        cli_provider = self._run_config.provider.name
+        cli_region = self._run_config.provider.region
+
+        provider_name = resolve_provider_name(
+            cli_value=cli_provider,
+            yaml_value=self._cfg.provider,
+        )
+        provider = get_provider(provider_name)
+        region = resolve_region(
+            provider,
+            cli_value=cli_region,
+            yaml_value=self._cfg.region,
+        )
+
+        # 解決結果を cfg に書き戻す (executor が参照する)
+        self._cfg.provider = provider.name
+        self._cfg.region = region
+
+        # RunConfig の Provider 駆動フィールドに Provider 既定値を適用
+        self._run_config.apply_provider_defaults(provider)
+        self._run_config.provider.name = provider.name
+        self._run_config.provider.region = region
+        return provider, region
+
     def _setup_resume(self, output_path: str) -> tuple[Set[int], bool]:
         """
         Resume モードの設定を行い、スキップ済みインデックスと追記フラグを返す。
@@ -248,6 +285,7 @@ class PipelineEngine:
 
         cc = rc.concurrency
         config_info: dict = {
+            "Provider": f"{self._cfg.provider} (region={self._cfg.region})",
             "Input Data Count": total_str,
             "Already Processed": processed_count,
             "Remaining": remaining_str,
@@ -461,6 +499,7 @@ class PipelineEngine:
         Returns:
             RunReport: 実行統計・結果のサマリー
         """
+        provider, region = self._resolve_provider()
         self._apply_transport_config()
         processed_indices, append_mode = self._setup_resume(output_path)
         dataset, total_count = self._load_dataset()

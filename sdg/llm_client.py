@@ -45,7 +45,8 @@ class SharedHttpTransport:
 
     全てのLLMClientインスタンス間でHTTPコネクションプールを共有し、
     HTTP/2多重化を利用してオーバーヘッドを低減する。
-    DeepSeek API の高並列（Flash=2500, Pro=500）に対応したチューニング済み。
+    既定の接続数 / キープアライブはモジュールロード時点の
+    `SDG_PROVIDER` 環境変数に応じて Provider 抽象から自動選択される。
 
     Attributes:
         DEFAULT_MAX_CONNECTIONS: デフォルトの最大接続数
@@ -54,15 +55,29 @@ class SharedHttpTransport:
         DEFAULT_CONNECT_TIMEOUT: デフォルトの接続タイムアウト（秒）
         DEFAULT_READ_TIMEOUT: デフォルトの読み取りタイムアウト（秒）
         DEFAULT_WRITE_TIMEOUT: デフォルトの書き込みタイムアウト（秒）
-        DEFAULT_POOL_TIMEOUT: デフォルトのプールタイムアウト（秒）
+        DEFAULT_POOL_TIMEOUT: デフォルトのプール取得タイムアウト（秒）
     """
 
-    # DeepSeek高並列向けチューニング
-    DEFAULT_MAX_CONNECTIONS: ClassVar[int] = 600       # V4 Pro 500 + 余裕
-    DEFAULT_MAX_KEEPALIVE_CONNECTIONS: ClassVar[int] = 300  # 半数を keep-alive
-    DEFAULT_KEEPALIVE_EXPIRY: ClassVar[float] = 90.0   # KVキャッシュ生存期間に合わせ長め
+    # Provider 抽象 (SDG_PROVIDER) から初期値を読み取って ClassVar に設定。
+    # 実行時の動的変更は get_instance() に明示値を渡すことで可能。
+    @staticmethod
+    def _provider_defaults() -> tuple[int, int, float]:
+        from .providers import PROVIDERS, DEFAULT_PROVIDER_NAME
+        import os
+
+        name = os.environ.get("SDG_PROVIDER", "").strip().lower()
+        provider = PROVIDERS.get(name) or PROVIDERS[DEFAULT_PROVIDER_NAME]
+        return (
+            provider.max_connections,
+            provider.max_keepalive,
+            provider.keepalive_expiry,
+        )
+
+    DEFAULT_MAX_CONNECTIONS: ClassVar[int] = _provider_defaults()[0]
+    DEFAULT_MAX_KEEPALIVE_CONNECTIONS: ClassVar[int] = _provider_defaults()[1]
+    DEFAULT_KEEPALIVE_EXPIRY: ClassVar[float] = _provider_defaults()[2]
     DEFAULT_CONNECT_TIMEOUT: ClassVar[float] = 30.0    # 初期接続は短め
-    DEFAULT_READ_TIMEOUT: ClassVar[float] = 900.0      # 15分（DeepSeek keep-alive最大10分 + 余裕）
+    DEFAULT_READ_TIMEOUT: ClassVar[float] = 900.0      # 15分 (keep-alive最大10分 + 余裕)
     DEFAULT_WRITE_TIMEOUT: ClassVar[float] = 600.0
     DEFAULT_POOL_TIMEOUT: ClassVar[float] = 120.0      # キュー滞留時の接続待ちを許容
 
@@ -441,7 +456,7 @@ class LLMClient:
             self.api_root = base + "/v1"
         self.api_key = api_key
         self.organization = organization
-        self._user_id = user_id          # DeepSeek user_id for KV cache isolation
+        self._user_id = user_id          # DeepSeek user_id for KV cache isolation (provider 設定で制御)
         self._http2 = http2
 
         # 注入されたtransportを保持（ライフサイクル管理は呼び出し元の責任）

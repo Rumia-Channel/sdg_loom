@@ -246,6 +246,97 @@ engine.run("output/result.jsonl")
 
 ---
 
+## Providers & Regions 🌍
+
+SDG-LOOM supports multiple LLM providers through a unified abstraction. Each
+provider defines its own base URLs (per region), default model, API key
+environment variable, KV-cache/user_id support, thinking-mode style, and
+recommended concurrency tuning.
+
+### Supported providers
+
+| Provider | Default model | Default base URL | API key env | Notes |
+|----------|---------------|------------------|-------------|-------|
+| `deepseek` | `deepseek-v4-flash` | `https://api.deepseek.com` | `DEEPSEEK_API_KEY` | KV cache isolation via `user_id`, thinking mode (`extra_body.thinking`) |
+| `minimax` | `MiniMax M3`        | `https://api.minimax.io` (global) / `https://api.minimaxi.com` (cn) | `MINIMAX_API_KEY` | Multi-region (cn/global) |
+
+### Region selection (MiniMax)
+
+`minimax` supports two regions. Pick one with any of the three mechanisms
+below (priority: **CLI > env > YAML > default**):
+
+| Source | Example |
+|--------|---------|
+| CLI flag | `--provider minimax --region cn` |
+| Env var | `SDG_PROVIDER=minimax SDG_REGION=cn` |
+| YAML   | `provider: minimax`<br>`region: cn` |
+
+If no region is specified, the provider's default is used (currently `global`).
+
+### Provider resolution chain
+
+Provider name is also resolved by **CLI > env > YAML > default (`deepseek`)**.
+This means existing DeepSeek YAML files keep working without changes.
+
+### Quick example (MiniMax, China region)
+
+```yaml
+provider: minimax
+region: cn   # use api.minimaxi.com
+
+models:
+  - name: m3
+    api_model: MiniMax M3   # optional: provider default is also MiniMax M3
+    api_key: "${ENV.MINIMAX_API_KEY}"
+
+blocks:
+  - type: ai
+    exec: 1
+    model: m3
+    prompts:
+      - "次の入力を要約してください: {UserInput}"
+    outputs:
+      - name: Summary
+        select: full
+  - type: end
+    exec: 10
+    final:
+      - name: result
+        value: "{Summary}"
+```
+
+Run it:
+
+```bash
+# 1. CLI flag
+sdg run --yaml examples/minimax_demo.yaml --input examples/data/minimax_input.jsonl \
+  --output output/result.jsonl --provider minimax --region cn
+
+# 2. env var
+SDG_PROVIDER=minimax SDG_REGION=cn \
+  sdg run --yaml examples/minimax_demo.yaml --input examples/data/minimax_input.jsonl \
+  --output output/result.jsonl
+```
+
+### Per-provider concurrency defaults
+
+The `ConcurrencyConfig` and `SharedHttpTransport` apply provider-specific
+defaults. For example, `--max-concurrent` is omitted on the CLI, the framework
+uses `128` for DeepSeek and `64` for MiniMax. Override any field explicitly
+to take precedence over the provider default.
+
+| Field | DeepSeek | MiniMax |
+|-------|---------:|--------:|
+| `max_concurrent` (固定モード) | 128 | 64 |
+| `max_concurrent_limit` (適応モード上限) | 500 | 200 |
+| `min_concurrent` (適応モード下限) | 8 | 4 |
+| `target_latency_ms` | 3000 | 4000 |
+| `target_queue_depth` | 64 | 32 |
+| `max_batch_size` | 64 | 32 |
+| `SharedHttpTransport` max_connections | 600 | 300 |
+
+---
+
 ## Detailed Documentation 📖
 
 * **[Usage Guide](docs/usage.md)** - Detailed usage of CLI and Python API
