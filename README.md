@@ -1,20 +1,17 @@
-# SDG-LOOM DeepSeek Edition
+# SDG-LOOM
 
-> **This is a DeepSeek-optimized edition of SDG-LOOM.** All defaults, optimizations, and examples are tuned specifically for the [DeepSeek API](https://api-docs.deepseek.com/), leveraging KV context caching, thinking mode, and HTTP/2 connection pooling to maximize throughput and cost efficiency.
-
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/foxn2000/sdg_loom)
+> **Scalable synthetic data generator for LLM fine-tuning.** Supports DeepSeek API and MiniMax API with unified provider abstraction, adaptive concurrency control, and declarative MABEL v2.0 agent programs.
 
 <img width="1024" alt="SDG-LOOM Logo" src="assets/logo.png" />
 
 ## Overview
 
-**SDG-LOOM (Scalable Data Generator LOOM)** is a framework optimized for **DeepSeek API** to efficiently generate synthetic datasets for LLMs and perform large-scale data analysis using AI agents. By leveraging DeepSeek's KV cache (context caching) and thinking mode, it achieves dramatically improved throughput and quality in high-frequency batch processing scenarios.
+**SDG-LOOM (Scalable Data Generator LOOM)** is a high-throughput batch synthetic-dataset generator framework purpose-built for producing fine-tuning data at scale. It uses **MABEL v2.0** (Model And Blocks Expansion Language) declarative agent programs and supports multiple LLM providers through a unified abstraction layer.
 
-By adopting the latest **MABEL (Model And Blocks Expansion Language) v2.0**, it enables highly descriptive and flexible structured agent programs. It is built specifically for **DeepSeek's API**, leveraging unique features like automatic disk-based KV context caching, thinking mode for reasoning chains, and prefix caching for repeated system prompts — achieving orders-of-magnitude cost savings on large-scale generation tasks.
+- **DeepSeek API** — KV context caching (disk-based), thinking mode (chain-of-thought), HTTP/2 connection pooling
+- **MiniMax API** — Multi-region support (China / global), MiniMax-M3 with 1M context
 
-Furthermore, by incorporating adaptive batch processing and error handling mechanisms internally, stable operation is possible even in situations where request volumes fluctuate. It is specifically optimized for DeepSeek's KV cache behavior: repeated system prompts and prefix patterns are automatically cached on disk, delivering massive token savings in pipeline scenarios where the same template is applied across thousands of rows.
-
-This framework is designed with a focus on large-scale, high-speed, and stable utilization of AI agents, making it an ideal tool for users who need to efficiently scale up advanced tasks using the DeepSeek API.
+Adaptive concurrency control (TCP Vegas/Reno/BBR-inspired) with EMA smoothing handles rate limits and latency spikes automatically, making it safe for large-scale batch generation.
 
 ---
 
@@ -127,7 +124,15 @@ uv pip install -e .
 
 ## Quick Start
 
-Minimal configuration example:
+Minimal configuration examples for both providers:
+
+<table>
+<tr>
+<th>DeepSeek</th>
+<th>MiniMax</th>
+</tr>
+<tr>
+<td>
 
 ```yaml
 mabel:
@@ -147,13 +152,49 @@ blocks:
     outputs:
       - name: Summary
         select: full
-  
+
   - type: end
     exec: 2
     final:
       - name: answer
         value: "{Summary}"
 ```
+
+</td>
+<td>
+
+```yaml
+mabel:
+  version: "2.0"
+
+provider: minimax
+region: cn
+
+models:
+  - name: m3
+    api_model: MiniMax-M3
+    api_key: "${ENV.MINIMAX_API_KEY}"
+
+blocks:
+  - type: ai
+    exec: 1
+    model: m3
+    prompts:
+      - "次の入力を要約してください: {UserInput}"
+    outputs:
+      - name: Summary
+        select: full
+
+  - type: end
+    exec: 2
+    final:
+      - name: answer
+        value: "{Summary}"
+```
+
+</td>
+</tr>
+</table>
 
 For detailed specifications, please refer to:
 
@@ -164,6 +205,17 @@ For detailed specifications, please refer to:
 ## Usage
 
 ### Command Line (CLI) Execution
+
+Select your provider and region at the CLI:
+
+```bash
+# MiniMax (China region)
+sdg run --yaml pipeline.yaml --input data.jsonl --output result.jsonl \
+  --provider minimax --region cn
+
+# DeepSeek (default — no --provider needed)
+sdg run --yaml pipeline.yaml --input data.jsonl --output result.jsonl
+```
 
 Basic JSONL processing:
 
@@ -258,7 +310,7 @@ recommended concurrency tuning.
 | Provider | Default model | Default base URL | API key env | Notes |
 |----------|---------------|------------------|-------------|-------|
 | `deepseek` | `deepseek-v4-flash` | `https://api.deepseek.com` | `DEEPSEEK_API_KEY` | KV cache isolation via `user_id`, thinking mode (`extra_body.thinking`) |
-| `minimax` | `MiniMax M3`        | `https://api.minimax.io` (global) / `https://api.minimaxi.com` (cn) | `MINIMAX_API_KEY` | Multi-region (cn/global) |
+| `minimax` | `MiniMax-M3`        | `https://api.minimax.io` (global) / `https://api.minimaxi.com` (cn) | `MINIMAX_API_KEY` | Multi-region (cn/global) |
 
 ### Region selection (MiniMax)
 
@@ -286,7 +338,7 @@ region: cn   # use api.minimaxi.com
 
 models:
   - name: m3
-    api_model: MiniMax M3   # optional: provider default is also MiniMax M3
+    api_model: MiniMax-M3   # optional: provider default is also MiniMax-M3
     api_key: "${ENV.MINIMAX_API_KEY}"
 
 blocks:
@@ -354,16 +406,74 @@ This tool provides an intuitive way to design and manage MABEL pipelines without
 
 ---
 
+## Dataset Generation Examples 🧮
+
+### Japanese Math Chain-of-Thought (Boku-kko Persona)
+
+Generate a 14-level Japanese math curriculum dataset with a "自信家な僕っ娘" (confident boy-style girl) character persona:
+
+**MiniMax:**
+```bash
+export MINIMAX_API_KEY="sk-..."
+uv run sdg run \
+  --yaml examples/cot_japanese_math_boku.yaml \
+  --input examples/data/cot_japanese_math_scaled_seeds.jsonl \
+  --output output/japanese_math_cot_boku.jsonl \
+  --provider minimax --region cn \
+  --adaptive --max-batch 32 --resume
+```
+
+**DeepSeek:**
+```bash
+export DEEPSEEK_API_KEY="sk-..."
+uv run sdg run \
+  --yaml examples/cot_japanese_math_boku.yaml \
+  --input examples/data/cot_japanese_math_scaled_seeds.jsonl \
+  --output output/japanese_math_cot_boku.jsonl \
+  --adaptive --max-batch 64 --resume
+```
+
+**Large-scale (1,000+ per level):**
+```bash
+# Set provider via environment
+export MINIMAX_API_KEY="sk-..."
+export SDG_PROVIDER=minimax
+export SDG_REGION=cn
+
+# 14 levels × 5000 = 70,000 questions
+uv run python examples/scripts/generate_cot_boku_1k.py --items-per-level 5000 --resume
+```
+
+### Pure Math CoT (neutral tone):
+```bash
+uv run sdg run \
+  --yaml examples/cot_japanese_math.yaml \
+  --input examples/data/cot_japanese_math_scaled_seeds.jsonl \
+  --output output/japanese_math_cot.jsonl \
+  --provider minimax --region cn --adaptive --resume
+```
+
+---
+
 ## Examples
 
-Sample code and data are provided in the following directory.
+Sample pipelines and data are provided in `examples/`:
 
-* **`examples/`**
-  * `sdg_demo.yaml` : Basic usage example
-  * `sdg_demo_v2.yaml` : Advanced MABEL v2 sample
-  * `sdg_comprehensive_v2.yaml` : Comprehensive v2 feature sample
-  * `helpers.py` : External Python function usage example
-  * `data/` : Sample input/output datasets
+| File | Description |
+|------|-------------|
+| `cot_japanese_math_boku.yaml` | Japanese math CoT with bokukko persona (14 levels) |
+| `cot_japanese_math.yaml` | Japanese math CoT (neutral tone) |
+| `cot_math_generator.yaml` | English math CoT generator |
+| `minimax_demo.yaml` | MiniMax provider demo (Japanese summarization) |
+| `sdg_demo_v2.yaml` | MABEL v2.0 advanced features |
+| `sdg_demo.yaml` | Basic usage example |
+| `data/` | Sample input/output datasets |
+
+Scripts for large-scale seed generation:
+```bash
+examples/scripts/generate_cot_boku_1k.py           # Bokukko 1k-per-level generator
+examples/scripts/generate_cot_japanese_math_scaled_seeds.py  # Seed expansion utility
+```
 
 ---
 
