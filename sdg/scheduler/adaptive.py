@@ -145,6 +145,27 @@ class AdaptiveScheduler:
         cfg: Any = None,
         clients: Any = None,
     ) -> AsyncIterator[StreamingResult]:
+        from ..adaptive import AdaptiveController, MetricsCollector, MetricsType
+        from ..executors.scheduling import (
+            HierarchicalTaskScheduler,
+            SchedulingMemoryConfig,
+            SchedulerConfig as _HierSchedulerConfig,
+            StreamingContextManager,
+        )
+
+        controller = AdaptiveController(
+            min_concurrency=self._min_concurrent,
+            max_concurrency=self._max_concurrent,
+            target_latency_ms=float(self._target_latency_ms),
+            target_queue_depth=self._target_queue_depth,
+            initial_concurrency=self._max_concurrent,
+            reprobe_enabled=self._reprobe_enabled,
+            reprobe_interval_rows=self._reprobe_rows,
+            reprobe_interval_seconds=self._reprobe_seconds,
+            provider=self._resolve_provider(),
+        )
+        self._controller = controller
+
         # メトリクスコレクター（vllm / sglang オプション）
         metrics_collector: Optional[Any] = None
         if self._metrics_type != "none" and cfg is not None:

@@ -3,7 +3,7 @@
 MiniMax API (中国本土版 / グローバル版) 向け。
 - 中国本土 (cn): api.minimaxi.com
 - グローバル (global): api.minimax.io
-- デフォルトモデル: MiniMax M3
+- デフォルトモデル: MiniMax-M3
 - レート制限/レイテンシ特性が DeepSeek と異なる可能性が高いため、
   やや保守的な並列既定値を採用。
 """
@@ -21,7 +21,7 @@ MINIMAX_PROVIDER = Provider(
         REGION_CN: "https://api.minimaxi.com",
         REGION_GLOBAL: "https://api.minimax.io",
     },
-    default_model="MiniMax M3",
+    default_model="MiniMax-M3",
     api_key_env="MINIMAX_API_KEY",
     api_key_fallbacks=(),
     # MiniMax の user_id による KV 分離は未確認のため既定では無効。
