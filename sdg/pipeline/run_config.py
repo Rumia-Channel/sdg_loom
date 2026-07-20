@@ -163,6 +163,8 @@ class RunConfig(BaseModel):
     save_intermediate: bool = False
     show_progress: bool = True
     verbose: bool = False
+    # キャラクターカード (--character) のパス。指定時は YAML の character: キーより優先される。
+    character_path: Optional[str] = None
 
     def apply_provider_defaults(self, provider) -> None:
         """ConcurrencyConfig の None フィールドに Provider 既定値を適用する。

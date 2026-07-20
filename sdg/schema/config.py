@@ -358,6 +358,10 @@ class SDGConfig(BaseModel):
     # プロバイダー設定 (YAML で provider: / region: を指定可能)
     provider: Optional[str] = None
     region: Optional[str] = None
+    # キャラクターカード (sdg/character.py) への参照パス。
+    # YAML の character: キーから読み込まれ、相対パスは YAML ファイルの
+    # あるディレクトリ基準で絶対パスに解決される (from_yaml() 参照)。
+    character: Optional[str] = None
     # 実行時に外部から設定される最適化オプション
     optimization: Dict[str, Any] = Field(default_factory=dict)
 
@@ -424,6 +428,31 @@ class SDGConfig(BaseModel):
         return provider, region
 
     # ------------------------------------------------------------------
+    # キャラクターカード注入ヘルパー
+    # ------------------------------------------------------------------
+
+    def apply_character(self, character_path: Optional[str] = None) -> None:
+        """キャラクターカードを読み込み、globals.const['char'] に注入する。
+
+        character_path (CLI --character 相当) が指定されればそれを優先し、
+        未指定なら self.character (YAML の character: キー) を使う。
+        どちらも無ければ何もしない。既に 'char' キーが存在する場合は上書きする。
+
+        PipelineEngine.run() および test_run() の両実行経路から、
+        ExecutionContext 生成前に呼び出すこと
+        (ExecutionContext は globals.const を生成時にコピーするため)。
+        """
+        path = character_path or self.character
+        if not path:
+            return
+
+        from ..character import build_template_vars, load_character
+
+        abs_path = os.path.abspath(path)
+        card = load_character(abs_path)
+        self.globals_.const["char"] = build_template_vars(card, card_path=abs_path)
+
+    # ------------------------------------------------------------------
     # ファクトリ
     # ------------------------------------------------------------------
 
@@ -484,6 +513,17 @@ class SDGConfig(BaseModel):
                 )
             )
 
+        # キャラクターカードのパス解決 (相対パスは YAML ファイルのあるディレクトリ基準)
+        character_path = data.get("character")
+        if character_path:
+            if not os.path.isabs(character_path):
+                yaml_dir = os.path.dirname(os.path.abspath(path))
+                character_path = os.path.normpath(
+                    os.path.join(yaml_dir, character_path)
+                )
+            else:
+                character_path = os.path.normpath(character_path)
+
         cfg = cls(
             mabel=mabel,
             runtime=runtime,
@@ -498,6 +538,7 @@ class SDGConfig(BaseModel):
             connections=connections,
             provider=data.get("provider"),
             region=data.get("region"),
+            character=character_path,
         )
 
         # 基本検証

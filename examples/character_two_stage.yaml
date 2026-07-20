@@ -1,0 +1,192 @@
+# キャラクター分離型 2段構成パイプライン（弱いモデル向けリファレンス実装）
+#
+# タスク（数学の解答生成）とキャラクター性を完全に分離する構成:
+#
+#   Stage 1 (solve):     問題を「無人格」で正確に解く。キャラの知識は一切不要。
+#   Stage 2 (stylize):   解答を {char.rewrite_system} で文体変換する。
+#                        事実・数値・式は固定し、言い回しだけを変えるため、
+#                        推論力の低いモデルでも成立する。
+#   Stage 3 (validate):  sdg.character.score_voice でキャラクター性を機械検証。
+#
+# この YAML はキャラクターの中身を一切知らない。キャラクターは
+# --character フラグまたは下の character: キーで差し替えるだけでよい。
+#
+# 実行例:
+#   $env:SDG_API_MODEL="deepseek-v4-flash"; $env:SDG_API_KEY="sk-..."; $env:SDG_BASE_URL="https://api.deepseek.com"
+#   sdg test-run --yaml examples/character_two_stage.yaml `
+#       --character characters/confident_bokukko.yaml `
+#       --input examples/data/cot_japanese_math_seeds.jsonl
+#
+#   sdg run --yaml examples/character_two_stage.yaml `
+#       --character characters/confident_bokukko.yaml `
+#       --input examples/data/cot_japanese_math_seeds.jsonl `
+#       --output output/character_two_stage.jsonl --adaptive
+
+mabel:
+  version: "2.0"
+  id: "com.example.character_two_stage"
+  name: "キャラクター分離型 2段構成データ生成"
+  description: |
+    タスク解決と文体変換を分離し、キャラクターカード ({char.*}) だけで
+    キャラクター性を注入する。弱いモデルでもキャラ一貫性を保てる構成。
+
+# キャラクターカードの既定値（CLI の --character が優先される）
+character: ../characters/confident_bokukko.yaml
+
+models:
+  # Stage 1: 正確さ担当（強めのモデル推奨）
+  - name: solver
+    api_model: "${ENV.SDG_API_MODEL}"
+    api_key: "${ENV.SDG_API_KEY}"
+    base_url: "${ENV.SDG_BASE_URL}"
+    request_defaults:
+      temperature: 0.3
+      max_tokens: 4096
+  # Stage 2: 文体変換担当（弱い・安価なモデルでよい）
+  # SDG_STYLE_MODEL に安価なモデルを指定する。未設定なら SDG_API_MODEL と
+  # 同じ値を入れておけばよい（${ENV.*} にフォールバック記法はない）。
+  - name: stylizer
+    api_model: "${ENV.SDG_STYLE_MODEL}"
+    api_key: "${ENV.SDG_API_KEY}"
+    base_url: "${ENV.SDG_BASE_URL}"
+    request_defaults:
+      temperature: 0.6
+      max_tokens: 4096
+
+blocks:
+  # ============================================================
+  # Stage 1: 無人格でタスクを解く（キャラ知識ゼロ）
+  # ============================================================
+  - type: ai
+    exec: 10
+    id: solve
+    name: "無人格の解答生成"
+    model: solver
+    system_prompt: |
+      あなたは数学教材の模範解答を作成する専門家です。
+      与えられた場面をもとに、日本語の文章題を1つ作成し、正確に解いてください。
+
+      # 指示
+      - 問題文は条件が明確で、答えが一意に定まること。
+      - 解答の計算式は LaTeX 記法（$...$）で書くこと。
+      - 文体は無人格・中立でよい。キャラクター性は不要。
+      - 解答の最後に「答え: 〜」を明示すること。
+
+      # 出力形式（厳守）
+      <problem>
+      [日本語の文章題]
+      </problem>
+      <solution>
+      [中立な文体の解答。計算式は LaTeX。最後に「答え: 〜」]
+      </solution>
+    prompts:
+      - |
+        以下の素材から文章題を作成し、解いてください。
+
+        【単元】 {topic}
+        【新規導入概念】 {new_concept}
+        【場面メモ】 {scenario}
+    outputs:
+      - name: Problem
+        select: tag
+        tag: problem
+      - name: NeutralSolution
+        select: tag
+        tag: solution
+
+  # ============================================================
+  # Stage 2: 文体変換（キャラクターカードが全指示を供給）
+  # ============================================================
+  - type: ai
+    exec: 20
+    id: stylize
+    name: "キャラクター文体への変換"
+    model: stylizer
+    system_prompt: |
+      {char.rewrite_system}
+    prompts:
+      - |
+        次の文章を変換してください。style_intensity は {style_intensity} です。
+
+        {NeutralSolution}
+    outputs:
+      - name: StyledSolution
+        select: tag
+        tag: styled
+
+  # ============================================================
+  # Stage 3: キャラクター性の機械検証（LLM 不使用）
+  # ============================================================
+  - type: python
+    exec: 30
+    id: validate
+    name: "口調スコアリング"
+    entrypoint: validate_voice
+    function_code: |
+      from sdg.character import load_character, score_voice
+
+      _card_cache = {}
+
+      def validate_voice(ctx, styled: str, neutral: str, intensity: str, card_path: str) -> dict:
+          """文体変換結果をカードの validation 定義でスコアリングする"""
+          if card_path not in _card_cache:
+              _card_cache[card_path] = load_character(card_path)
+          card = _card_cache[card_path]
+
+          try:
+              intensity_num = int(intensity or card.style_intensity.default)
+          except (ValueError, TypeError):
+              intensity_num = card.style_intensity.default
+
+          report = score_voice(styled, card, intensity_num)
+
+          # 変換で数値が壊れていないかの簡易チェック
+          import re
+          nums_before = sorted(re.findall(r"\d+(?:\.\d+)?", neutral or ""))
+          nums_after = sorted(re.findall(r"\d+(?:\.\d+)?", styled or ""))
+          numbers_preserved = nums_before == nums_after
+          if not numbers_preserved:
+              report["warnings"].append(
+                  "文体変換で数値が変わっています (before: "
+                  f"{nums_before}, after: {nums_after})"
+              )
+
+          return {
+              "VoicePassed": report["passed"] and numbers_preserved,
+              "VoiceScore": report["score"],
+              "VoiceRequired": report["required"],
+              "VoiceWarnings": report["warnings"],
+          }
+    inputs:
+      styled: "{StyledSolution}"
+      neutral: "{NeutralSolution}"
+      intensity: "{style_intensity}"
+      card_path: "{char.card_path}"
+    outputs:
+      - VoicePassed
+      - VoiceScore
+      - VoiceRequired
+      - VoiceWarnings
+
+  # ============================================================
+  # 最終出力
+  # ============================================================
+  - type: end
+    exec: 40
+    id: emit
+    name: "最終出力"
+    final:
+      - name: problem
+        value: "{Problem}"
+      - name: neutral_solution
+        value: "{NeutralSolution}"
+      - name: styled_solution
+        value: "{StyledSolution}"
+      - name: character
+        value: "{char.name}"
+      - name: voice_passed
+        value: "{VoicePassed}"
+      - name: voice_score
+        value: "{VoiceScore}"
+      - name: voice_warnings
+        value: "{VoiceWarnings}"

@@ -131,6 +131,15 @@ class PipelineEngine:
         else:
             return FixedScheduler(cfg)
 
+    def _apply_character(self) -> None:
+        """キャラクターカードを cfg.globals_.const['char'] に注入する。
+
+        RunConfig.character_path (--character フラグ) が YAML の
+        character: キーより優先される。ExecutionContext 生成前
+        (row 処理開始前) に呼び出す必要がある。
+        """
+        self._cfg.apply_character(self._run_config.character_path)
+
     def _apply_transport_config(self) -> None:
         """cfg.optimization に TransportConfig の設定を反映する。"""
         tr_cfg = self._run_config.transport
@@ -499,6 +508,7 @@ class PipelineEngine:
         Returns:
             RunReport: 実行統計・結果のサマリー
         """
+        self._apply_character()
         provider, region = self._resolve_provider()
         self._apply_transport_config()
         processed_indices, append_mode = self._setup_resume(output_path)

@@ -8,8 +8,9 @@
 2. [CLIからの使用方法](#cliからの使用方法)
 3. [Python APIからの使用方法](#python-apiからの使用方法)
 4. [高度な最適化機能](#高度な最適化機能)
-5. [パーサーについて](#パーサーについて)
-6. [入出力データ形式](#入出力データ形式)
+5. [キャラクターカード（タスクとペルソナの分離）](#キャラクターカードタスクとペルソナの分離)
+6. [パーサーについて](#パーサーについて)
+7. [入出力データ形式](#入出力データ形式)
 
 ---
 
@@ -1307,6 +1308,57 @@ gc_interval=100
 4. `enable_memory_optimization=True` を設定
 
 詳細な実装とAPIリファレンスについては、[Phase 2最適化ガイド](phase2_optimization.md)を参照してください。
+
+---
+
+## キャラクターカード（タスクとペルソナの分離）
+
+SDG-LOOMでは「何を生成するか」（タスク YAML）と「誰の声で話すか」（キャラクターカード）
+を分離できます。キャラクターカードは `sdg/character.py` が読み込む独立した YAML ファイルで、
+読み込むと `globals.const` に `char` 変数として注入されるため、タスク YAML 側は
+キャラクターの中身を一切知らずに `{char.*}` を参照できます。
+
+### 使い方
+
+タスク YAML のトップレベル `character:` キーでカードを指定します（パスは
+YAML ファイルのあるディレクトリ基準で解決されます）:
+
+```yaml
+character: ../characters/confident_bokukko.yaml
+```
+
+または実行時に `--character` フラグで上書きできます（YAML の `character:` キーより優先、
+`sdg run` / `sdg test-run` の両方で使用可能）:
+
+```bash
+sdg run --yaml examples/character_two_stage.yaml \
+  --character characters/confident_bokukko.yaml \
+  --input examples/data/cot_japanese_math_seeds.jsonl \
+  --output output/result.jsonl
+```
+
+### 利用できる `{char.*}` 変数
+
+| 変数 | 説明 |
+|------|------|
+| `{char.name}` / `{char.label}` / `{char.persona}` / `{char.first_person}` | 基本情報 |
+| `{char.profile}` | キャラクター設定シート全体（プロンプト埋め込み用） |
+| `{char.speech_rules}` / `{char.forbidden}` / `{char.examples}` / `{char.intensity_guide}` | 各プロンプト部品 |
+| `{char.solve_system}` | 1段構成用: タスクをキャラの声で直接解くシステムプロンプト（強いモデル向け） |
+| `{char.rewrite_system}` | 2段構成用: 無人格な下書きを文体変換するシステムプロンプト（弱いモデル向け） |
+| `{char.card_path}` | カードファイルの絶対パス（`python` ブロックで再読込する用） |
+
+### 2段構成について
+
+弱いモデルでもキャラクター性を安定させたい場合は、次のような2段構成が有効です:
+
+1. **Stage 1（解答）**: 無人格なシステムプロンプトでタスクを正確に解く。
+2. **Stage 2（文体変換）**: `{char.rewrite_system}` を使い、事実を変えずに文体だけを
+   キャラクターの声に変換する。
+3. **Stage 3（検証）**: `python` ブロックから `sdg.character.score_voice` を呼び出し、
+   LLMなしでキャラクター性を機械的にスコアリングする。
+
+完全な実装例は `examples/character_two_stage.yaml` を参照してください。
 
 ---
 

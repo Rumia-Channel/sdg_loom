@@ -1,5 +1,6 @@
 from __future__ import annotations
 import argparse
+import os
 import sys
 from .runner import (
     run,
@@ -41,6 +42,7 @@ YAMLブループリントを入力データセットに対して実行
   -h, --help               このヘルプメッセージを表示して終了
   --help.ja                このヘルプメッセージを日本語で表示して終了
   --save-intermediate      中間出力を保存
+  --character PATH         キャラクターカード YAML のパス（{char.*} 変数を注入。YAML の character: キーより優先）
 
 データ制限オプション:
   --max-inputs MAX_INPUTS, -n MAX_INPUTS
@@ -168,6 +170,7 @@ YAMLブループリントを1件のデータに対してテスト実行
 オプション引数:
   -h, --help               このヘルプメッセージを表示して終了
   --help.ja                このヘルプメッセージを日本語で表示して終了
+  --character PATH         キャラクターカード YAML のパス（{char.*} 変数を注入。YAML の character: キーより優先）
 
 Hugging Face データセットオプション:
   --subset SUBSET          データセットのサブセット名
@@ -212,6 +215,7 @@ SDG (Scalable Data Generator) CLI [レガシーモード: sdg --yaml ...]
   --input INPUT         入力データセット (.jsonl または .csv)
   --output OUTPUT       出力JSONLファイル
   --save-intermediate   中間出力を保存
+  --character PATH      キャラクターカード YAML のパス（{char.*} 変数を注入。YAML の character: キーより優先）
   --max-inputs MAX_INPUTS, -n MAX_INPUTS
                         処理する最大入力データ数（デフォルト: 全件処理）
   --dataset DATASET     Hugging Face データセット名
@@ -273,6 +277,16 @@ def build_run_parser(p: argparse.ArgumentParser) -> argparse.ArgumentParser:
     p.add_argument("--output", required=True, help="Output JSONL file")
     p.add_argument(
         "--save-intermediate", action="store_true", help="Save intermediate outputs"
+    )
+
+    # Character card option (resolve by CLI > YAML 'character:' key)
+    p.add_argument(
+        "--character",
+        default=None,
+        help=(
+            "Character card YAML path (injects {char.*} template variables). "
+            "Takes precedence over the YAML 'character:' key."
+        ),
     )
 
     # Provider options (resolve by CLI > env > YAML > default)
@@ -578,6 +592,16 @@ def build_test_run_parser(p: argparse.ArgumentParser) -> argparse.ArgumentParser
     p.add_argument("--yaml", required=True, help="YAML blueprint path")
     p.add_argument("--input", help="Input dataset (.jsonl or .csv)")
 
+    # Character card option (resolve by CLI > YAML 'character:' key)
+    p.add_argument(
+        "--character",
+        default=None,
+        help=(
+            "Character card YAML path (injects {char.*} template variables). "
+            "Takes precedence over the YAML 'character:' key."
+        ),
+    )
+
     # Hugging Face Dataset options
     p.add_argument("--dataset", help="Hugging Face dataset name")
     p.add_argument("--subset", help="Dataset subset name")
@@ -682,6 +706,11 @@ def _execute_test_run(args):
             locale=locale,
             show_meta=args.meta,
             random_input=args.random_input,
+            character_path=(
+                os.path.abspath(args.character)
+                if getattr(args, "character", None)
+                else None
+            ),
         )
         # Result is already displayed by test_run using rich formatting
 
@@ -830,6 +859,11 @@ def _build_run_config(args) -> "RunConfig":
         save_intermediate=getattr(args, "save_intermediate", False),
         show_progress=not getattr(args, "no_progress", False),
         verbose=getattr(args, "verbose", False),
+        character_path=(
+            os.path.abspath(args.character)
+            if getattr(args, "character", None)
+            else None
+        ),
     )
 
 
@@ -892,6 +926,11 @@ def _execute_run(args):
             subset=args.subset,
             split=args.split,
             mapping=mapping if mapping else None,
+            character_path=(
+                os.path.abspath(args.character)
+                if getattr(args, "character", None)
+                else None
+            ),
         )
         return
 

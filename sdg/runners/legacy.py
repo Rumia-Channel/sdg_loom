@@ -29,11 +29,14 @@ def run(
     subset: Optional[str] = None,
     split: str = "train",
     mapping: Optional[Dict[str, str]] = None,
+    character_path: Optional[str] = None,
 ):
     """
     従来のブロック単位一括処理パイプライン実行（後方互換性のため維持）
     """
     cfg = load_config(yaml_path)
+    # キャラクターカードを注入 (--character が YAML の character: キーより優先)
+    cfg.apply_character(character_path)
     # load data
     if input_path:
         if input_path.endswith(".jsonl"):

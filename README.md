@@ -337,6 +337,50 @@ to take precedence over the provider default.
 
 ---
 
+## Character Cards (Task / Persona Separation) 🎭
+
+SDG-LOOM lets you separate **what to generate** (the task YAML) from **who is
+speaking** (a character card). A character card is a standalone YAML file
+(see `sdg/character.py`) that gets loaded and injected into `globals.const`
+as a `char` variable, so any block can reference `{char.*}` without the task
+YAML knowing anything about the persona.
+
+### Usage
+
+Point a task YAML at a card via the top-level `character:` key (path is
+resolved relative to the YAML file's directory):
+
+```yaml
+character: ../characters/confident_bokukko.yaml
+```
+
+Or override it at run time with `--character` (takes precedence over the
+YAML key), for both `sdg run` and `sdg test-run`:
+
+```bash
+sdg run --yaml examples/character_two_stage.yaml \
+  --character characters/confident_bokukko.yaml \
+  --input examples/data/cot_japanese_math_seeds.jsonl \
+  --output output/result.jsonl
+```
+
+### Available `{char.*}` variables
+
+| Variable | Description |
+|----------|-------------|
+| `{char.name}` / `{char.label}` / `{char.persona}` / `{char.first_person}` | Basic identity fields |
+| `{char.profile}` | Full character sheet (prompt-ready) |
+| `{char.speech_rules}` / `{char.forbidden}` / `{char.examples}` / `{char.intensity_guide}` | Individual prompt components |
+| `{char.solve_system}` | System prompt for solving a task directly in-character (single-stage, strong models) |
+| `{char.rewrite_system}` | System prompt for style-transferring a neutral draft (two-stage, weak models) |
+| `{char.card_path}` | Absolute path to the card file (for reloading inside `python` blocks) |
+
+See `examples/character_two_stage.yaml` for a full two-stage reference
+pipeline (neutral solve → character rewrite → mechanical voice validation via
+`sdg.character.score_voice`).
+
+---
+
 ## Detailed Documentation 📖
 
 * **[Usage Guide](docs/usage.md)** - Detailed usage of CLI and Python API

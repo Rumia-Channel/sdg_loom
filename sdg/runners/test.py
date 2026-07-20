@@ -269,6 +269,8 @@ def test_run(
     show_meta: bool = False,
     # Data selection options
     random_input: bool = False,
+    # Character card options
+    character_path: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     テスト実行: YAMLブループリントを1件のデータに対して実行し、動作確認を行う。
@@ -287,6 +289,8 @@ def test_run(
         locale: UIロケール ('en' or 'ja')
         show_meta: メタ情報を表示するか（デフォルト: False）
         random_input: ランダムにデータを選択するか（デフォルト: False）
+        character_path: キャラクターカード YAML のパス（--character フラグ）。
+            指定時は YAML の character: キーより優先される。
 
     Returns:
         実行結果の辞書
@@ -313,6 +317,10 @@ def test_run(
 
     # 設定を読み込み
     cfg = load_config(yaml_path)
+
+    # キャラクターカードを注入 (--character が YAML の character: キーより優先)
+    # ExecutionContext は globals.const をコピーするため、生成前に行う必要がある。
+    cfg.apply_character(character_path)
 
     # 最適化オプションを設定（テスト実行用）
     cfg.optimization = {
