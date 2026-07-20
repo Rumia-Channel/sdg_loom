@@ -486,6 +486,38 @@ Small local models also tend to struggle with prompts that mix strict task
 correctness and character voice in one shot; see the **Character Cards**
 section below for a two-stage design that works better with weaker models.
 
+### Google AI Studio (Gemini API / Gemma)
+
+Google's Gemini API — the same one behind [Google AI Studio](https://aistudio.google.com/) —
+exposes an [OpenAI-compatible endpoint](https://ai.google.dev/gemini-api/docs/openai),
+so it works the same way as any other `base_url` override: no new provider
+code needed.
+
+```bash
+# get a key from https://aistudio.google.com/apikey
+export SDG_API_MODEL="gemma-4-31b-it"     # Gemma 4 31B (instruction-tuned)
+export SDG_API_KEY="AIza..."               # your Gemini API key
+export SDG_BASE_URL="https://generativelanguage.googleapis.com/v1beta/openai/"
+
+sdg run --yaml examples/cot_japanese_math_boku.yaml \
+  --input examples/data/cot_japanese_math_seeds.jsonl \
+  --output output/gemma4.jsonl \
+  --max-concurrent 3
+```
+
+The free tier for `gemma-4-31b-it` is reported at roughly 15 requests/minute
+and 1,500 requests/day (check your current quota on the
+[AI Studio rate-limit page](https://aistudio.google.com/rate-limit), since
+limits vary by tier and can change) — keep `--max-concurrent` low, or use
+`--adaptive --max-batch 3 --target-latency-ms 8000` so the adaptive
+controller backs off cleanly on 429s instead of hammering the quota. Paid
+tiers raise these limits substantially; adjust `--max-concurrent` /
+`--max-batch` accordingly once you're on one.
+
+Like the llama.cpp case above, `gemma-4-31b-it` is a smaller model than
+DeepSeek/MiniMax's flagship models, so the two-stage **Character Cards**
+pipeline is worth using here too if you're combining it with a persona.
+
 ---
 
 ## Character Cards (Task / Persona Separation) 🎭
@@ -555,6 +587,80 @@ sdg run --yaml examples/character_two_stage.yaml \
 Each stage can use a different model — e.g. a strong model for `solver` and
 a cheap/local one for `stylizer` — by giving them separate `models:` entries
 in the task YAML and pointing each at whichever `base_url` fits.
+
+---
+
+## Structured Output 🧩
+
+By default, an `ai` block's output is free text that you carve up with
+`outputs: [{select: tag}]` or `{select: regex}` — the model is instructed
+via the prompt to wrap sections in `<tag>...</tag>`, and SDG-LOOM regexes
+them back out. This is simple but fragile: a model that forgets a closing
+tag, or slips explanatory prose outside the tags, silently corrupts that
+row. Weaker models hit this far more often than DeepSeek/GPT-class ones.
+
+`mode:` on an `ai` block controls how the response is produced and how much
+structure is enforced:
+
+| `mode` | What it does | Extraction |
+|--------|---------------|------------|
+| `text` (default) | Free text, whatever the prompt asks for | `select: tag` / `regex` / `full` |
+| `json` | Adds `response_format: {type: json_object}` — only guarantees *syntactically valid* JSON, not a specific shape | `select: jsonpath` |
+| `json_schema` | Adds `response_format: {type: json_schema, ...}` — constrains the model to a specific schema (name/type/required keys) via provider-side structured decoding | `select: jsonpath` |
+| `tool` | Forces a single tool/function call (`tools` + `tool_choice`) matching the schema — the widest provider support of the structured options | `select: jsonpath` |
+
+For `json_schema`/`tool`, the schema comes from either:
+
+1. An explicit `output_schema:` on the block (full control — nested types,
+   descriptions, exact key names), or
+2. Auto-derived from the block's `outputs:` list (any entry with
+   `select: jsonpath` becomes a required string property named after its
+   `path`) — no `output_schema:` needed for simple flat records.
+
+```yaml
+- type: ai
+  exec: 10
+  id: generate_and_solve
+  model: math_solver
+  mode: tool
+  output_schema:
+    name: submit_math_answer
+    description: "生成した文章題・解答ログ・最終回答をこの形式で提出する"
+    schema:
+      type: object
+      properties:
+        problem: {type: string, description: "日本語の文章題本文"}
+        cot_solution: {type: string, description: "解答ログ（LaTeX を含む）"}
+        final_answer: {type: string, description: "最終回答"}
+      required: [problem, cot_solution, final_answer]
+      additionalProperties: false
+  system_prompt: |
+    あなたは日本語の数学教材データを作る専門家です。
+    submit_math_answer ツールの引数として problem / cot_solution / final_answer を
+    すべて埋めて呼び出してください。
+  prompts:
+    - "seed: {scenario} / 単元: {topic}"
+  outputs:
+    - {name: Problem, select: jsonpath, path: problem}
+    - {name: CoTSolution, select: jsonpath, path: cot_solution}
+    - {name: FinalAnswer, select: jsonpath, path: final_answer}
+```
+
+The model no longer needs prompt-level formatting instructions like
+`<problem>...</problem>` — "for CoT Math, this is the required output
+shape" is enforced by the request itself, not just requested in prose. See
+`examples/cot_math_tool_schema.yaml` for the full runnable version, and
+compare it against `examples/cot_japanese_math.yaml` (same task, tag-based
+extraction) to see the difference. `examples/character_two_stage.yaml`'s
+`solve` stage also uses `mode: tool` for the same reason — Stage 1 there is
+specifically the accuracy-critical step.
+
+**Provider support varies.** DeepSeek, Gemini (via the OpenAI-compatible
+endpoint), and most vLLM/SGLang backends support tool calling; `json_schema`
+support is less universal. Self-hosted backends (llama.cpp, etc.) vary by
+build — `sdg test-run` a single row first to confirm `tool_calls` come back
+correctly before scaling up. If a backend doesn't support the requested
+mode, fall back to the `text` + tag-extraction pattern.
 
 ---
 
@@ -632,7 +738,8 @@ Sample pipelines and data are provided in `examples/`:
 |------|-------------|
 | `cot_japanese_math_boku.yaml` | Japanese math CoT with bokukko persona, single-stage (14 levels) |
 | `character_two_stage.yaml` | Persona-agnostic two-stage pipeline: neutral solve → character rewrite → voice validation |
-| `cot_japanese_math.yaml` | Japanese math CoT (neutral tone) |
+| `cot_japanese_math.yaml` | Japanese math CoT (neutral tone, tag-based extraction) |
+| `cot_math_tool_schema.yaml` | Same task as above, using `mode: tool` + `output_schema` structured output instead of tags |
 | `cot_math_generator.yaml` | English math CoT generator |
 | `minimax_demo.yaml` | MiniMax provider demo (Japanese summarization) |
 | `sdg_demo_v2.yaml` | MABEL v2.0 advanced features |

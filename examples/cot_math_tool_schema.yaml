@@ -1,0 +1,124 @@
+# 日本語・算数/数学 CoT データセット生成 — 構造化出力(tool calling)版
+#
+# examples/cot_japanese_math.yaml と同じタスクだが、出力の取り出し方が違う:
+#
+#   cot_japanese_math.yaml (タグ抽出):
+#     プロンプトで <problem>...</problem> の書式を指示し、生成後に正規表現で
+#     タグの中身を抜き出す。モデルが閉じタグを忘れる・タグの外に地の文を
+#     混ぜる・ネストを壊す、といった失敗が弱いモデルほど増える。
+#
+#   このファイル (mode: tool による構造化出力):
+#     `output_schema` で {problem, cot_solution, final_answer} という
+#     JSON の形を定義し、forced tool calling（tool_choice で1つの関数呼び出しを
+#     強制）でモデルにその形のまま出力させる。抽出はプロンプト内の書式指示に
+#     頼らず、API 側のスキーマ制約に頼る。「CoT Math ならこの形式の出力が
+#     求められる」という契約を、プロンプト文だけでなくリクエスト自体に埋め込む。
+#
+# 対応が必要な条件:
+#   - base_url の先が OpenAI 互換の tool calling(function calling)に対応していること。
+#     DeepSeek / Gemini(Google AI Studio の OpenAI 互換エンドポイント)/多くの
+#     vLLM・SGLang バックエンドは対応。対応が不明な自前ホストモデル(llama.cpp 等)は
+#     まず sdg test-run で1件試し、tool_calls が正しく返るか確認すること。
+#   - 未対応のバックエンドでは examples/cot_japanese_math.yaml のタグ抽出版を使う。
+#
+# 実行例:
+#   sdg test-run --yaml examples/cot_math_tool_schema.yaml --input examples/data/cot_japanese_math_seeds.jsonl
+#   sdg run --yaml examples/cot_math_tool_schema.yaml --input examples/data/cot_japanese_math_scaled_seeds.jsonl --output output/cot_math_tool_schema.jsonl --adaptive --resume
+
+mabel:
+  version: "2.0"
+  id: "com.example.cot_math_tool_schema"
+  name: "日本語 数学推論データセット生成器 (構造化出力版)"
+  description: |
+    cot_japanese_math.yaml と同じ中立トーンの CoT 数学データを生成するが、
+    <tag> 抽出ではなく mode: tool + output_schema による構造化出力を使う。
+    弱いモデルでも出力形式が安定することを示すリファレンス実装。
+
+models:
+  - name: math_solver
+    api_model: "${ENV.SDG_API_MODEL}"
+    api_key: "${ENV.SDG_API_KEY}"
+    base_url: "${ENV.SDG_BASE_URL}"
+    request_defaults:
+      temperature: 0.3
+      max_tokens: 8192
+      top_p: 0.95
+
+blocks:
+  - type: ai
+    exec: 10
+    id: generate_and_solve
+    name: "文章題の生成と解答（構造化出力）"
+    model: math_solver
+    mode: tool
+    output_schema:
+      name: submit_math_answer
+      description: "生成した文章題・解答ログ・最終回答をこの形式で提出する"
+      schema:
+        type: object
+        properties:
+          problem:
+            type: string
+            description: "日本語の文章題本文。場面・条件・問いを含む。数式が必要な箇所だけ $...$ を使う。"
+          cot_solution:
+            type: string
+            description: "解答ログ（思考過程）。条件確認・計算・検算を含む自然な日本語。数式は $...$ で書く。"
+          final_answer:
+            type: string
+            description: "問いへの最終回答。答えの数値・単位に加え、根拠となる計算や条件を短く含める1〜2文。"
+        required: ["problem", "cot_solution", "final_answer"]
+        additionalProperties: false
+    system_prompt: |
+      あなたは日本語の数学教材データを作る専門家です。
+      与えられた seed をもとに文章題を1つ作成し、中立的な教師口調で正確に解いてください。
+      特定のキャラクター、ロールプレイ、一人称、口癖は使いません。
+
+      # 文章題作成の方針
+      - 出力はすべて日本語にする。
+      - 問いは1つに絞り、条件不足や複数解を避ける。
+      - 「Level」「Step」「内部難易度」などのメタ情報を問題文に入れない。
+      - seed の場面は素材として使い、同じ数値・同じ対象物・同じ問い方をそのまま繰り返さない。
+      - allowed_methods が与えられている場合、その範囲の知識だけで自然に解ける問題にする。
+      - forbidden_methods が与えられている場合、その知識を使わないと自然に解けない問題にしない。
+
+      # 解答ログの方針
+      - 数式は必要な箇所だけ $...$ で書く。
+      - 条件確認や検算が必要な問題では、式・単位・整数条件・境界値を確認する。
+      - 答えだけを出さず、問いへの答えとして必要な計算過程と理由を残す。
+      - final_answer は単独で読める簡潔な最終回答にする。途中の迷い・フィラー・自己修正は入れない。
+
+      # 出力
+      submit_math_answer ツールの引数として、problem / cot_solution / final_answer を
+      すべて埋めて呼び出すこと。ツール呼び出し以外の説明文やタグは出力しない。
+    prompts:
+      - |
+        以下の seed をもとに、数学の日本語文章題を作成し、解いてください。
+
+        【内部難易度番号】 {level}
+        【対象学年】 {grade}
+        【新規導入概念】 {new_concept}
+        【既習事項】 {prerequisites}
+        【単元・分野】 {topic}
+        【seed の場面メモ】 {scenario}
+    outputs:
+      - name: Problem
+        select: jsonpath
+        path: problem
+      - name: CoTSolution
+        select: jsonpath
+        path: cot_solution
+      - name: FinalAnswer
+        select: jsonpath
+        path: final_answer
+
+  - type: end
+    exec: 20
+    id: emit
+    name: "最終出力"
+    final:
+      - name: problem
+        value: "{Problem}"
+      - name: cot_solution
+        value: "{CoTSolution}"
+      - name: final_answer
+        value: "{FinalAnswer}"

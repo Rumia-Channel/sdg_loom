@@ -52,7 +52,11 @@ class AIBlockConfig(BlockBase):
     outputs: List[OutputDef] = Field(default_factory=list)
     params: Dict[str, Any] = Field(default_factory=dict)
     attachments: List[Dict[str, Any]] = Field(default_factory=list)
-    mode: str = "text"  # text | json
+    mode: str = "text"  # text | json | json_schema | tool
+    # mode=json_schema/tool の場合に使うスキーマ定義。
+    # 期待する形: {"name": str, "description": str(省略可),
+    #             "schema": dict(JSON Schema), "strict": bool(省略可, 既定True)}
+    output_schema: Optional[Dict[str, Any]] = None
     save_to: Optional[Dict[str, Any]] = None
 
 

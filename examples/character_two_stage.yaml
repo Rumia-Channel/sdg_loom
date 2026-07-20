@@ -57,11 +57,32 @@ blocks:
   # ============================================================
   # Stage 1: 無人格でタスクを解く（キャラ知識ゼロ）
   # ============================================================
+  #
+  # mode: tool を使い、<problem>/<solution> タグ抽出ではなく forced tool
+  # calling でスキーマを強制する。モデルが閉じタグを忘れる・地の文を
+  # 混ぜるといった tag 抽出特有の失敗がなくなるため、Stage 1(正確さ担当)
+  # には特に相性がいい。対応していない provider/バックエンドでは
+  # `mode: tag` 相当の従来書式（<problem>タグ）に戻すこと。
   - type: ai
     exec: 10
     id: solve
     name: "無人格の解答生成"
     model: solver
+    mode: tool
+    output_schema:
+      name: submit_solution
+      description: "生成した文章題と中立な文体の解答をこの形式で提出する"
+      schema:
+        type: object
+        properties:
+          problem:
+            type: string
+            description: "日本語の文章題本文"
+          solution:
+            type: string
+            description: "中立な文体の解答。計算式は LaTeX（$...$）。最後に「答え: 〜」を含む"
+        required: ["problem", "solution"]
+        additionalProperties: false
     system_prompt: |
       あなたは数学教材の模範解答を作成する専門家です。
       与えられた場面をもとに、日本語の文章題を1つ作成し、正確に解いてください。
@@ -71,14 +92,7 @@ blocks:
       - 解答の計算式は LaTeX 記法（$...$）で書くこと。
       - 文体は無人格・中立でよい。キャラクター性は不要。
       - 解答の最後に「答え: 〜」を明示すること。
-
-      # 出力形式（厳守）
-      <problem>
-      [日本語の文章題]
-      </problem>
-      <solution>
-      [中立な文体の解答。計算式は LaTeX。最後に「答え: 〜」]
-      </solution>
+      - 出力は必ず submit_solution ツール呼び出しの引数として渡すこと。
     prompts:
       - |
         以下の素材から文章題を作成し、解いてください。
@@ -88,11 +102,11 @@ blocks:
         【場面メモ】 {scenario}
     outputs:
       - name: Problem
-        select: tag
-        tag: problem
+        select: jsonpath
+        path: problem
       - name: NeutralSolution
-        select: tag
-        tag: solution
+        select: jsonpath
+        path: solution
 
   # ============================================================
   # Stage 2: 文体変換（キャラクターカードが全指示を供給）

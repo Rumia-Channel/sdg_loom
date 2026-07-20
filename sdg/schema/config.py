@@ -275,6 +275,7 @@ def _normalize_block(d: Dict[str, Any]) -> BlockBase:
             params=d.get("params", {}),
             attachments=d.get("attachments", []),
             mode=d.get("mode", "text"),
+            output_schema=d.get("output_schema"),
             save_to=d.get("save_to"),
             **common,
         )
@@ -547,6 +548,16 @@ class SDGConfig(BaseModel):
                 raise ValueError("Block casting failed for ai")
             if b.type == "ai" and not getattr(b, "model", ""):
                 raise ValueError("ai block requires 'model'")
+            if b.type == "ai" and getattr(b, "mode", "text") in ("json_schema", "tool"):
+                has_schema = bool(getattr(b, "output_schema", None))
+                has_jsonpath_outputs = any(
+                    o.select == "jsonpath" for o in (b.outputs or [])
+                )
+                if not has_schema and not has_jsonpath_outputs:
+                    raise ValueError(
+                        f"ai block '{b.id}' with mode={b.mode!r} needs either 'output_schema' "
+                        "or outputs with select: jsonpath to build a schema from"
+                    )
             if b.type == "python":
                 if not (getattr(b, "function", "") or getattr(b, "entrypoint", None)):
                     raise ValueError("python block requires 'function' or 'entrypoint'")

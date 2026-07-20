@@ -220,6 +220,43 @@ def _has_images_in_prompts(
     return False
 
 
+def _resolve_output_schema(block: AIBlock) -> Dict[str, Any]:
+    """ai block の output_schema、または outputs(select=jsonpath)から
+    JSON Schema を解決する。json_schema/tool モードで使う。"""
+    if block.output_schema:
+        schema_def = dict(block.output_schema)
+        schema_def.setdefault("name", block.id or "submit_output")
+        schema_def.setdefault("description", "")
+        schema_def.setdefault("strict", True)
+        return schema_def
+
+    properties: Dict[str, Any] = {}
+    required: List[str] = []
+    for out in block.outputs or []:
+        if out.select != "jsonpath" or not out.path:
+            continue
+        key = out.path.replace("$.", "").split(".")[0]
+        json_type = "string"
+        if out.type_hint == "number":
+            json_type = "number"
+        elif out.type_hint == "boolean":
+            json_type = "boolean"
+        properties[key] = {"type": json_type}
+        required.append(key)
+
+    return {
+        "name": block.id or "submit_output",
+        "description": "",
+        "strict": True,
+        "schema": {
+            "type": "object",
+            "properties": properties,
+            "required": required,
+            "additionalProperties": False,
+        },
+    }
+
+
 async def _execute_ai_block_single(
     block: AIBlock,
     ctx: Dict[str, Any],
@@ -270,6 +307,33 @@ async def _execute_ai_block_single(
     # v2: JSONモード
     if block.mode == "json":
         req_params["response_format"] = {"type": "json_object"}
+    elif block.mode == "json_schema":
+        schema_def = _resolve_output_schema(block)
+        req_params["response_format"] = {
+            "type": "json_schema",
+            "json_schema": {
+                "name": schema_def["name"],
+                "description": schema_def.get("description", ""),
+                "schema": schema_def["schema"],
+                "strict": schema_def.get("strict", True),
+            },
+        }
+    elif block.mode == "tool":
+        schema_def = _resolve_output_schema(block)
+        req_params["tools"] = [
+            {
+                "type": "function",
+                "function": {
+                    "name": schema_def["name"],
+                    "description": schema_def.get("description", ""),
+                    "parameters": schema_def["schema"],
+                },
+            }
+        ]
+        req_params["tool_choice"] = {
+            "type": "function",
+            "function": {"name": schema_def["name"]},
+        }
 
     # v2: Reasoningモード (Provider ごとに有効化方法が異なる)
     # - DeepSeek: extra_body={"thinking": {"type": "enabled"}} + reasoning_effort
@@ -324,9 +388,14 @@ async def _execute_ai_block_single(
         raise result.error
 
     # Reasoningがある場合の処理
-    text = result.content or ""
+    if block.mode == "tool" and result.tool_calls:
+        text = result.tool_calls[0]["arguments"] or ""
+    else:
+        text = result.content or ""
 
-    if model_def.enable_reasoning and result.reasoning:
+    # 構造化モード(json_schema/tool)では reasoning テキストで text を
+    # 上書き/前置きしない（jsonpath パースが壊れるため）
+    if block.mode not in ("json_schema", "tool") and model_def.enable_reasoning and result.reasoning:
         if not text.strip():
             # DeepSeek thinking mode: contentが空でreasoning_contentに内容がある場合、
             # 思考プロセス全体を出力として使用する

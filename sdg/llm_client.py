@@ -20,6 +20,9 @@ class LLMCallResult:
     reasoning: Optional[str] = None
     cache_hit_tokens: int = 0
     cache_miss_tokens: int = 0
+    # forced tool calling (mode: tool) の結果。各要素は
+    # {"id": str|None, "name": str|None, "arguments": str(JSON文字列)}
+    tool_calls: Optional[List[Dict[str, Any]]] = None
 
     @property
     def success(self) -> bool:
@@ -607,6 +610,11 @@ class LLMClient:
 
                     content_parts: list[str] = []
                     reasoning_parts: list[str] = []
+                    # forced tool calling (mode: tool) 用の蓄積バッファ。
+                    # OpenAI ストリーミングの tool_calls は chunk ごとに
+                    # index単位で分割配信されるため、同じ index の
+                    # arguments 文字列断片を連結して初めて完全な JSON になる。
+                    tool_call_parts: dict[int, dict] = {}
                     prompt_tokens = 0
                     completion_tokens = 0
                     total_tokens = 0
@@ -625,6 +633,20 @@ class LLMClient:
                             rc = getattr(delta, "reasoning_content", None)
                             if rc:
                                 reasoning_parts.append(rc)
+                            tcs = getattr(delta, "tool_calls", None)
+                            if tcs:
+                                for tc in tcs:
+                                    slot = tool_call_parts.setdefault(
+                                        tc.index,
+                                        {"id": None, "name": None, "arguments": []},
+                                    )
+                                    if tc.id:
+                                        slot["id"] = tc.id
+                                    if tc.function:
+                                        if tc.function.name:
+                                            slot["name"] = tc.function.name
+                                        if tc.function.arguments:
+                                            slot["arguments"].append(tc.function.arguments)
 
                         if hasattr(chunk, "usage") and chunk.usage is not None:
                             prompt_tokens = getattr(chunk.usage, "prompt_tokens", 0) or 0
@@ -635,11 +657,23 @@ class LLMClient:
 
                     content = "".join(content_parts) if content_parts else None
                     reasoning = "".join(reasoning_parts) if reasoning_parts else None
+                    tool_calls = (
+                        [
+                            {
+                                "id": slot["id"],
+                                "name": slot["name"],
+                                "arguments": "".join(slot["arguments"]),
+                            }
+                            for _, slot in sorted(tool_call_parts.items())
+                        ]
+                        if tool_call_parts
+                        else None
+                    )
 
                     if ttfb_ms == 0:
                         ttfb_ms = now_ms() - t0  # 空レスポンスのフォールバック
 
-                    if retry_on_empty and (content is None or not content.strip()) and not reasoning:
+                    if retry_on_empty and (content is None or not content.strip()) and not reasoning and not tool_calls:
                         if empty_retry_count < max_empty_retries - 1:
                             await asyncio.sleep(delay_ms / 1000.0)
                             delay_ms = int(delay_ms * factor)
@@ -654,6 +688,7 @@ class LLMClient:
                             reasoning=reasoning,
                             cache_hit_tokens=cache_hit_tokens,
                             cache_miss_tokens=cache_miss_tokens,
+                            tool_calls=tool_calls,
                         )
 
                     return LLMCallResult(
@@ -666,6 +701,7 @@ class LLMClient:
                         reasoning=reasoning,
                         cache_hit_tokens=cache_hit_tokens,
                         cache_miss_tokens=cache_miss_tokens,
+                        tool_calls=tool_calls,
                     )
                 except Exception as e:
                     status = getattr(e, "status_code", None)
