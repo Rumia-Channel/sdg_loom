@@ -197,13 +197,30 @@ def _render_intensity_guide(card: CharacterCard) -> str:
     return "\n".join(lines)
 
 
-def _render_examples(card: CharacterCard) -> str:
-    """few-shot 例（無人格 → キャラの声）のレンダリング"""
+def _render_examples(card: CharacterCard, *, mode: str = "rewrite") -> str:
+    """few-shot 例のレンダリング。
+
+    mode="rewrite": 文体変換タスク用。「変換前/変換後」という対比の言葉を使う
+                     （rewrite_system の文脈——無人格な下書きが実在するタスク）。
+    mode="voice":   キャラの声そのものを見せる用。「普通の言い方/このキャラの言い方」
+                     という言葉を使う（solve_system の文脈——「変換前」の下書きは
+                     存在せず、対比の言葉が浮いてしまうため出し分ける）。
+    """
     if not card.few_shot:
         return ""
-    parts = ["# 文体の例（無人格な文 → このキャラクターの声）"]
+    if mode == "voice":
+        header = "# 口調の例（このキャラクターがどう話すか）"
+        before_label, after_label = "普通の言い方", "このキャラの言い方"
+    else:
+        header = "# 文体の例（無人格な文 → このキャラクターの声）"
+        before_label, after_label = "変換前", "変換後"
+    parts = [header]
     for i, ex in enumerate(card.few_shot, 1):
-        block = [f"例{i}:", f"変換前: {ex.neutral.strip()}", f"変換後: {ex.styled.strip()}"]
+        block = [
+            f"例{i}:",
+            f"{before_label}: {ex.neutral.strip()}",
+            f"{after_label}: {ex.styled.strip()}",
+        ]
         if ex.note:
             block.append(f"要点: {ex.note.strip()}")
         parts.append("\n".join(block))
@@ -225,7 +242,7 @@ def _render_solve_system(card: CharacterCard) -> str:
     guide = _render_intensity_guide(card)
     if guide:
         parts.append(guide)
-    examples = _render_examples(card)
+    examples = _render_examples(card, mode="voice")
     if examples:
         parts.append(examples)
     parts.append(
@@ -257,6 +274,12 @@ def _render_rewrite_system(card: CharacterCard) -> str:
             + "」を使う。"
         )
     n = len(steps) + 1
+    if card.speech.politeness:
+        # 「です・ます」「である」などの敬体・常体を、語尾変換より先に
+        # 崩しておく。無人格な下書きは敬体で書かれがちなので、この変換が
+        # 抜けると弱いモデルほど敬体のまま素通りさせてしまう。
+        steps.append(f"{n}. 文全体の敬体・常体を次のルールに合わせて変える: {card.speech.politeness}")
+        n += 1
     if card.speech.endings:
         steps.append(
             f"{n}. 各文の語尾を、下の基本語尾のどれかに自然に置き換える。"

@@ -46,6 +46,9 @@ Adaptive concurrency control (TCP Vegas/Reno/BBR-inspired) with EMA smoothing ha
   * Key mapping feature for improved dataset compatibility
 * **Robust Error Handling**
   * Flexible error handling with retry mechanisms
+  * Failed rows are written to a separate `<output>.error.jsonl` file instead
+    of polluting the main output, so a run with partial failures still
+    produces a clean, directly-usable dataset
 * **Performance Optimization**
   * Shared HTTP transport for connection pooling
   * HTTP/2 support for improved throughput
@@ -57,6 +60,72 @@ Adaptive concurrency control (TCP Vegas/Reno/BBR-inspired) with EMA smoothing ha
   * Duplicate detection and deduplication rate
   * Parse/validation failure rate tracking
   * LLM token usage statistics per model
+
+---
+
+## Project Structure 🗂️
+
+```
+sdg/
+├── cli.py                 # argparse CLI: sdg run / sdg test-run / legacy mode
+├── config.py               # compat layer — re-exports sdg/schema/*, old AIBlock/LogicBlock/... aliases
+├── character.py            # character cards: CharacterCard, load_character(), build_template_vars(), score_voice()
+├── llm_client.py           # LLMClient (AsyncOpenAI wrapper), SharedHttpTransport, streaming TTFB latency
+├── io.py                   # AsyncBufferedWriter, jsonl/csv/HF-dataset readers, resume support
+├── mex.py                  # MEX: the MABEL v2 expression language (Turing-complete)
+├── utils.py                # render_template ({a.b} placeholders), image data-URI handling, JSONL cleanup
+├── profiler.py             # post-run profiling: language mix, length stats, dedup, token usage
+├── logger.py                # rich-based logger (en/ja locale)
+│
+├── schema/                 # Pydantic config models
+│   ├── config.py            # SDGConfig.from_yaml(), ModelConfig, GlobalsConfig, provider/character resolution
+│   └── blocks.py             # AIBlockConfig / LogicBlockConfig / PythonBlockConfig / EndBlockConfig
+│
+├── pipeline/                # unified execution engine
+│   ├── engine.py              # PipelineEngine — resume, provider defaults, character injection, run loop
+│   ├── run_config.py          # RunConfig / ConcurrencyConfig / IOConfig / ProviderConfig (all Pydantic)
+│   ├── _provider_defaults.py  # env-based lazy defaults for ConcurrencyConfig
+│   └── result.py              # RowResult / RunReport
+│
+├── executors/               # per-block-type execution logic
+│   ├── core.py                 # ExecutionContext (globals/loop/recursion budgets), template resolution
+│   ├── ai.py                    # AI block execution, client construction, multimodal content, thinking mode
+│   ├── logic.py                 # if/and/or/for/while/recurse/set/let/reduce/call/emit
+│   ├── python.py                # inline/external Python function blocks, PythonContext (ctx.get/set/log)
+│   ├── pipeline_core.py         # process_single_row() — runs one row through all blocks
+│   ├── pipeline_legacy.py       # legacy batch-mode runner (backward compat only)
+│   └── scheduling.py            # HierarchicalTaskScheduler, LRUCache, MemoryMonitor
+│
+├── scheduler/                # parallel execution strategies
+│   ├── fixed.py                 # FixedScheduler — asyncio.Semaphore, fixed concurrency
+│   └── adaptive.py              # AdaptiveScheduler — progressive launch, driven by AdaptiveController
+│
+├── adaptive/                  # adaptive concurrency control
+│   ├── controller.py             # AdaptiveController (TCP Vegas/Reno/BBR-inspired AIMD), DynamicSemaphore
+│   ├── batcher.py                 # RequestBatcher / AdaptiveRequestBatcher
+│   └── metrics.py                 # MetricsCollector (vLLM / SGLang Prometheus scraping)
+│
+├── providers/                 # LLM provider abstraction
+│   ├── base.py                    # Provider dataclass — base URLs, defaults, concurrency/adaptive tuning
+│   ├── deepseek.py                 # DeepSeek profile (KV cache isolation, thinking mode, aggressive AIMD)
+│   ├── minimax.py                  # MiniMax profile (cn / global regions, MiniMax-M3 1M context)
+│   └── __init__.py                 # registry + resolve_provider_name() / resolve_region()
+│
+└── runners/                   # backward-compatible entry points
+    ├── legacy.py                    # run() — legacy batch mode
+    └── test.py                      # test_run() — single-row debug run
+
+characters/                  # character cards (persona definitions, task-independent)
+└── confident_bokukko.yaml     # reference card: "自信家な僕っ娘"
+
+examples/                    # sample MABEL pipelines + input data + helper scripts
+docs/                        # usage guides and the full MABEL v2 spec
+```
+
+New LLM providers are added by dropping a `Provider(...)` instance in `sdg/providers/`
+and registering it in `sdg/providers/__init__.py`'s `PROVIDERS` dict — no changes
+needed elsewhere, since concurrency tuning, base URLs, and thinking-mode behavior
+all flow through that one dataclass.
 
 ---
 
@@ -387,6 +456,36 @@ to take precedence over the provider default.
 | `max_batch_size` | 64 | 32 |
 | `SharedHttpTransport` max_connections | 600 | 300 |
 
+### Local / self-hosted models (llama.cpp, vLLM, etc.)
+
+`LLMClient` is a plain `AsyncOpenAI` client, so **any OpenAI-compatible
+server works with zero code changes** — just point `base_url` at it. This
+includes `llama.cpp`'s built-in `llama-server` (`/v1/chat/completions`),
+vLLM, SGLang, and LM Studio.
+
+```bash
+# start an OpenAI-compatible server, e.g.:
+llama-server -m model.gguf -c 16384 --parallel 2 --host 127.0.0.1 --port 8080
+
+# then just override the endpoint — no provider needed
+export SDG_API_MODEL="local"                 # most local servers ignore this field
+export SDG_API_KEY="sk-no-key-required"       # api_key must be a non-empty string
+export SDG_BASE_URL="http://127.0.0.1:8080/v1"
+
+sdg run --yaml examples/cot_japanese_math_boku.yaml \
+  --input examples/data/cot_japanese_math_seeds.jsonl \
+  --output output/local.jsonl \
+  --max-concurrent 2   # match your server's --parallel slot count
+```
+
+Leaving `--provider` unset still applies the DeepSeek concurrency profile
+(`max_concurrent=128` by default) even though requests go to your local
+server — always pass `--max-concurrent` (or `--adaptive --max-batch`)
+explicitly to match what a single local instance can actually handle.
+Small local models also tend to struggle with prompts that mix strict task
+correctness and character voice in one shot; see the **Character Cards**
+section below for a two-stage design that works better with weaker models.
+
 ---
 
 ## Character Cards (Task / Persona Separation) 🎭
@@ -427,9 +526,35 @@ sdg run --yaml examples/character_two_stage.yaml \
 | `{char.rewrite_system}` | System prompt for style-transferring a neutral draft (two-stage, weak models) |
 | `{char.card_path}` | Absolute path to the card file (for reloading inside `python` blocks) |
 
-See `examples/character_two_stage.yaml` for a full two-stage reference
-pipeline (neutral solve → character rewrite → mechanical voice validation via
-`sdg.character.score_voice`).
+### Two-stage generation for weaker models
+
+`examples/character_two_stage.yaml` shows the recommended pattern when the
+generating model isn't strong enough to satisfy task correctness *and*
+character voice in a single call:
+
+1. **solve** — an `ai` block solves the task with a neutral, in-character-agnostic
+   system prompt (no persona knowledge required, so smaller models do fine).
+2. **stylize** — a second `ai` block runs `{char.rewrite_system}`, which
+   instructs the model to change *only* wording/tone (never facts, numbers,
+   or formulas) and gives it few-shot examples from the card. This is a much
+   easier task than solving-in-character, so it works even on small/cheap
+   models.
+3. **validate** — a `python` block calls `sdg.character.score_voice()` to
+   score the result against the card's marker groups, with **no LLM call at
+   all** — catching "tone-suffix-only" fake persona voice and flagging rows
+   that need regeneration.
+
+```bash
+sdg run --yaml examples/character_two_stage.yaml \
+  --character characters/confident_bokukko.yaml \
+  --input examples/data/cot_japanese_math_seeds.jsonl \
+  --output output/character_two_stage.jsonl \
+  --max-concurrent 4
+```
+
+Each stage can use a different model — e.g. a strong model for `solver` and
+a cheap/local one for `stylizer` — by giving them separate `models:` entries
+in the task YAML and pointing each at whichever `base_url` fits.
 
 ---
 
@@ -505,13 +630,15 @@ Sample pipelines and data are provided in `examples/`:
 
 | File | Description |
 |------|-------------|
-| `cot_japanese_math_boku.yaml` | Japanese math CoT with bokukko persona (14 levels) |
+| `cot_japanese_math_boku.yaml` | Japanese math CoT with bokukko persona, single-stage (14 levels) |
+| `character_two_stage.yaml` | Persona-agnostic two-stage pipeline: neutral solve → character rewrite → voice validation |
 | `cot_japanese_math.yaml` | Japanese math CoT (neutral tone) |
 | `cot_math_generator.yaml` | English math CoT generator |
 | `minimax_demo.yaml` | MiniMax provider demo (Japanese summarization) |
 | `sdg_demo_v2.yaml` | MABEL v2.0 advanced features |
 | `sdg_demo.yaml` | Basic usage example |
 | `data/` | Sample input/output datasets |
+| `../characters/` | Character cards (persona definitions), e.g. `confident_bokukko.yaml` |
 
 Scripts for large-scale seed generation:
 ```bash
