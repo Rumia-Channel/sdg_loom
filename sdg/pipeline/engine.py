@@ -13,6 +13,7 @@ import asyncio
 import json
 import os
 import time
+from pathlib import Path
 from typing import Any, Iterable, Optional, Set
 
 from ..config import PyBlock
@@ -412,12 +413,23 @@ class PipelineEngine:
 
         mode_label = "adaptive" if rc.concurrency.adaptive else "streaming"
 
-        async with AsyncBufferedWriter(
-            output_path,
-            buffer_size=io.buffer_size,
-            flush_interval=io.flush_interval,
-            append=append_mode,
-        ) as writer:
+        # エラー出力はメイン出力の拡張子 .jsonl を .error.jsonl に置換したパスに書き出す
+        error_output_path = str(Path(output_path).with_suffix("")) + ".error.jsonl"
+
+        async with (
+            AsyncBufferedWriter(
+                output_path,
+                buffer_size=io.buffer_size,
+                flush_interval=io.flush_interval,
+                append=append_mode,
+            ) as writer,
+            AsyncBufferedWriter(
+                error_output_path,
+                buffer_size=io.buffer_size,
+                flush_interval=io.flush_interval,
+                append=append_mode,
+            ) as error_writer,
+        ):
 
             # task_ref はプログレスコンテキスト内外で共有するリラプター
             task_ref: list[Any] = [None]
@@ -434,7 +446,7 @@ class PipelineEngine:
                     if result.error:
                         errors += 1
                         logger.debug(f"Error in row {result.row_index}: {result.error}")
-                        await writer.write(
+                        await error_writer.write(
                             {
                                 "_row_index": result.row_index,
                                 "_error": str(result.error),

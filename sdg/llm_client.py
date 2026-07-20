@@ -697,6 +697,17 @@ class LLMClient:
                                 "retry",
                                 "connection",
                                 "server error",
+                                "quota",
+                                "overload",
+                                # MiniMax 中国語エラーパターン
+                                "超时",          # timeout
+                                "限流",          # rate limit
+                                "频率",          # frequency/rate
+                                "请求过多",      # too many requests
+                                "超出限额",      # quota exceeded
+                                "暂时不可用",    # temporarily unavailable
+                                "服务器错误",    # server error
+                                "服务不可用",    # service unavailable
                             ]
                         ):
                             is_retryable = True

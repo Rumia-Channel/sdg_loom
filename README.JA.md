@@ -1,20 +1,17 @@
-# SDG-LOOM DeepSeek Edition
+# SDG-LOOM
 
-> **これはSDG-LOOMのDeepSeek最適化版です。** 全デフォルト設定、最適化、サンプルは [DeepSeek API](https://api-docs.deepseek.com/) 専用に調整されており、KVコンテキストキャッシング、thinking mode、HTTP/2接続プーリングを最大限に活用してスループットとコスト効率を最大化します。
-
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/foxn2000/sdg_loom)
+> **LLMファインチューニング用のスケーラブルな合成データ生成フレームワーク。** DeepSeek API と MiniMax API を統一プロバイダー抽象化でサポートし、適応型並行制御と宣言的 MABEL v2.0 エージェントプログラムを提供します。
 
 <img width="1024" alt="SDG-LOOM Logo" src="assets/logo.png" />
 
 ## 概要
 
-**SDG-LOOM（Scalable Data Generator LOOM）** は、**DeepSeek API** に最適化された合成データセット生成・AIエージェント大規模データ解析フレームワークです。DeepSeekのKVキャッシュ（コンテキストキャッシング）とthinking modeを活用し、大量のAIエージェントを並列運用するタスクで従来手法に比べて大幅なスループット向上とコスト削減を実現します。
+**SDG-LOOM（Scalable Data Generator LOOM）** は、ファインチューニング用データを大規模に生成するための高スループットなバッチ合成データセット生成フレームワークです。**MABEL v2.0**（Model And Blocks Expansion Language）による宣言的エージェントプログラムと、統一プロバイダー抽象化レイヤーを通じて複数のLLMプロバイダーをサポートします。
 
-最新バージョンの**MABEL (Model And Blocks Expansion Language) v2.0**を採用し、記述性と柔軟性が極めて高い構造化されたエージェントプログラムを実現できます。**DeepSeek API**専用に構築されており、ディスクベースのKVコンテキストキャッシュ、thinking mode（推論連鎖）、プレフィックスキャッシングなどDeepSeek固有の機能を最大限に活用することで、同一テンプレートを大量行に適用するパイプラインシナリオで桁違いのコスト効率を達成します。
+- **DeepSeek API** — KVコンテキストキャッシング（ディスクベース）、thinking mode（思考連鎖）、HTTP/2接続プーリング
+- **MiniMax API** — マルチリージョン対応（中国本土 / グローバル）、100万トークンコンテキストの MiniMax-M3
 
-さらに、内部で適応型のバッチ処理とエラー処理機構を搭載することで、リクエスト量が変動する状況でも安定した稼働が可能です。DeepSeekのKVキャッシュの挙動に最適化されており、繰り返し使用されるシステムプロンプトやプレフィックスパターンが自動的にディスクキャッシュされ、大量のトークンコストを節約します。
-
-本フレームワークは、DeepSeek APIを大規模・高速・安定的に活用することを重視した設計になっており、AIエージェントを活用した高度なタスクを効率的にスケールアップする必要があるユーザーに最適なツールとなっています。
+TCP輻輳制御（Vegas/Reno/BBR）に着想を得た適応型並行制御とEMA平滑化により、レート制限やレイテンシの変動に自動的に対応し、大規模バッチ生成でも安全に運用できます。
 
 ---
 
@@ -25,6 +22,7 @@
   * Thinking mode（思考連鎖推論）対応
   * キャッシュヒット/ミスの追跡とコスト分析
   * DeepSeekエンドポイント向けHTTP/2接続プーリング最適化
+  * MiniMax API（中国本土/グローバル）対応、MiniMax-M3 モデル
 * **MABEL v2.0 サポート**
 
   * チューリング完全な式言語（MEX）
@@ -135,7 +133,15 @@ uv pip install -e .
 
 ## クイックスタート
 
-最小限の設定例:
+プロバイダー別の最小設定例：
+
+<table>
+<tr>
+<th width="50%">DeepSeek</th>
+<th width="50%">MiniMax</th>
+</tr>
+<tr>
+<td>
 
 ```yaml
 mabel:
@@ -155,13 +161,49 @@ blocks:
     outputs:
       - name: Summary
         select: full
-  
+
   - type: end
     exec: 2
     final:
       - name: answer
         value: "{Summary}"
 ```
+
+</td>
+<td>
+
+```yaml
+provider: minimax
+region: cn
+
+mabel:
+  version: "2.0"
+
+models:
+  - name: minimax
+    api_model: MiniMax-M3
+    api_key: "${ENV.MINIMAX_API_KEY}"
+
+blocks:
+  - type: ai
+    exec: 1
+    model: minimax
+    prompts:
+      - "次の入力を要約してください: {UserInput}"
+    outputs:
+      - name: Summary
+        select: full
+
+  - type: end
+    exec: 2
+    final:
+      - name: answer
+        value: "{Summary}"
+```
+
+</td>
+</tr>
+</table>
 
 詳細な仕様は以下を参照してください：
 
@@ -172,6 +214,17 @@ blocks:
 ## 使用方法
 
 ### コマンドライン(CLI)での実行
+
+プロバイダーとリージョンの指定:
+
+```bash
+# MiniMax（中国本土リージョン）
+sdg run --yaml pipeline.yaml --input data.jsonl --output result.jsonl \
+  --provider minimax --region cn
+
+# DeepSeek（デフォルト — --provider 不要）
+sdg run --yaml pipeline.yaml --input data.jsonl --output result.jsonl
+```
 
 基本的なJSONL処理:
 
@@ -263,6 +316,43 @@ engine.run("output/result.jsonl")
 
 ---
 
+## プロバイダーとリージョン 🌍
+
+SDG-LOOM は統一された抽象化レイヤーを通じて複数のLLMプロバイダーをサポートします。各プロバイダーは独自のベースURL、デフォルトモデル、APIキー環境変数、推奨並列設定を定義します。
+
+### 対応プロバイダー
+
+| プロバイダー | デフォルトモデル | デフォルトベースURL | APIキー環境変数 | 備考 |
+|-------------|-----------------|---------------------|----------------|------|
+| `deepseek` | `deepseek-v4-flash` | `https://api.deepseek.com` | `DEEPSEEK_API_KEY` | KVキャッシュ分離（user_id）、thinking mode |
+| `minimax` | `MiniMax-M3` | `https://api.minimax.io` (global) / `https://api.minimaxi.com` (cn) | `MINIMAX_API_KEY` | マルチリージョン（cn/global） |
+
+### リージョン選択（MiniMax）
+
+`minimax` は2つのリージョンをサポートします。以下のいずれかで指定してください（優先順位: **CLI > 環境変数 > YAML > デフォルト**）:
+
+| 指定方法 | 例 |
+|---------|-----|
+| CLIフラグ | `--provider minimax --region cn` |
+| 環境変数 | `SDG_PROVIDER=minimax SDG_REGION=cn` |
+| YAML | `provider: minimax`<br>`region: cn` |
+
+### プロバイダー別並列処理のデフォルト値
+
+`--max-concurrent` を省略した場合、フレームワークはプロバイダーに応じた既定値を使用します。
+
+| 項目 | DeepSeek | MiniMax |
+|------|---------:|--------:|
+| `max_concurrent`（固定モード） | 128 | 64 |
+| `max_concurrent_limit`（適応モード上限） | 500 | 200 |
+| `min_concurrent`（適応モード下限） | 8 | 4 |
+| `target_latency_ms` | 3000 | 4000 |
+| `target_queue_depth` | 64 | 32 |
+| `max_batch_size` | 64 | 32 |
+| `SharedHttpTransport` max_connections | 600 | 300 |
+
+---
+
 ## 詳細ドキュメント 📖
 
 * **[使用ガイド](docs/usage.ja.md)** - CLI・Python APIの詳細な使用方法
@@ -280,17 +370,74 @@ MABELファイルのビジュアル編集用に、専用のGUIツールを提供
 
 ---
 
+## データセット生成サンプル 🧮
+
+### 日本語 算数・数学 文章題 CoT（僕っ娘キャラクター版）
+
+14レベルの算数・数学カリキュラムに沿って「自信家な僕っ娘」キャラクターの解答データセットを生成します。
+
+**MiniMax で実行:**
+```bash
+export MINIMAX_API_KEY="sk-..."
+uv run sdg run \
+  --yaml examples/cot_japanese_math_boku.yaml \
+  --input examples/data/cot_japanese_math_scaled_seeds.jsonl \
+  --output output/japanese_math_cot_boku.jsonl \
+  --provider minimax --region cn \
+  --adaptive --max-batch 32 --resume
+```
+
+**DeepSeek で実行:**
+```bash
+export DEEPSEEK_API_KEY="sk-..."
+uv run sdg run \
+  --yaml examples/cot_japanese_math_boku.yaml \
+  --input examples/data/cot_japanese_math_scaled_seeds.jsonl \
+  --output output/japanese_math_cot_boku.jsonl \
+  --adaptive --max-batch 64 --resume
+```
+
+**大規模生成（1レベルあたり1000件以上）:**
+```bash
+# 環境変数でプロバイダー指定
+export MINIMAX_API_KEY="sk-..."
+export SDG_PROVIDER=minimax
+export SDG_REGION=cn
+
+# 14レベル × 5000 = 70,000問
+uv run python examples/scripts/generate_cot_boku_1k.py --items-per-level 5000 --resume
+```
+
+### 日本語 算数・数学 文章題 CoT（標準版・キャラクターなし）:
+```bash
+uv run sdg run \
+  --yaml examples/cot_japanese_math.yaml \
+  --input examples/data/cot_japanese_math_scaled_seeds.jsonl \
+  --output output/japanese_math_cot.jsonl \
+  --provider minimax --region cn --adaptive --resume
+```
+
+---
+
 ## サンプル集
 
-以下のディレクトリでサンプルコード・データを提供しています。
+`examples/` ディレクトリに各種パイプラインとデータを提供しています。
 
-* **`examples/`**
+| ファイル | 説明 |
+|---------|------|
+| `cot_japanese_math_boku.yaml` | 日本語算数・数学 CoT（僕っ娘キャラクター版・14レベル） |
+| `cot_japanese_math.yaml` | 日本語算数・数学 CoT（標準版） |
+| `cot_math_generator.yaml` | 英語 数学 CoT 生成器 |
+| `minimax_demo.yaml` | MiniMax プロバイダーデモ（日本語要約） |
+| `sdg_demo_v2.yaml` | MABEL v2.0 高度な機能サンプル |
+| `sdg_demo.yaml` | 基本的な使用例 |
+| `data/` | サンプル入出力データセット |
 
-  * `sdg_demo.yaml` : 基本的な使用例
-  * `sdg_demo_v2.yaml` : 高度なMABEL v2サンプル
-  * `sdg_comprehensive_v2.yaml` : v2全機能網羅的サンプル
-  * `helpers.py` : 外部Python関数の活用例
-  * `data/` : サンプル入力・出力データセット
+大規模シード生成用スクリプト:
+```bash
+examples/scripts/generate_cot_boku_1k.py              # 僕っ娘 レベルあたり1k件生成
+examples/scripts/generate_cot_japanese_math_scaled_seeds.py  # シード拡張ユーティリティ
+```
 
 ---
 

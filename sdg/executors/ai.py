@@ -32,8 +32,12 @@ def _resolve_required_env_ref(
     *,
     model_name: str,
     field: str,
+    fallback: Any = None,
 ) -> Any:
-    """実行時モデル設定に残った ${ENV.NAME} を解決し、未設定なら明示的に失敗する。"""
+    """実行時モデル設定に残った ${ENV.NAME} を解決し、未設定なら明示的に失敗する。
+
+    fallback が指定されている場合は、対象環境変数が未設定でも fallback を返す。
+    """
     if not isinstance(value, str):
         return value
 
@@ -44,6 +48,8 @@ def _resolve_required_env_ref(
     env_name = match.group(1)
     resolved = os.environ.get(env_name)
     if resolved is None:
+        if fallback is not None:
+            return fallback
         raise ValueError(
             f"Environment variable {env_name} is not set "
             f"for model '{model_name}' field '{field}'"
@@ -83,12 +89,14 @@ def _build_clients(cfg: SDGConfig) -> Dict[str, LLMClient]:
             m.api_key,
             model_name=m.name,
             field="api_key",
+            fallback=os.environ.get(provider.api_key_env),
         )
         # base_url が ${ENV.NAME} 形式なら解決を試み、未設定なら Provider 既定。
         base_url = _resolve_required_env_ref(
             m.base_url,
             model_name=m.name,
             field="base_url",
+            fallback=default_base_url,
         ) or default_base_url
         timeout = (m.request_defaults or {}).get("timeout_sec")
         clients[m.name] = LLMClient(
@@ -295,6 +303,7 @@ async def _execute_ai_block_single(
         model_def.api_model,
         model_name=model_def.name,
         field="api_model",
+        fallback=provider.default_model,
     )
     payload = {"model": api_model, "messages": msgs, **req_params}
     result: LLMCallResult = await client._one_chat(payload, retry_cfg)
