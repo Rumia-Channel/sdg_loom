@@ -150,6 +150,13 @@ LLMリトライオプション:
   # 生成後プロファイリングを有効化（ターミナル表示 + JSON出力）
   sdg run --yaml config.yaml --input data.jsonl --output result.jsonl \\
     --profile --profile-output profile.json
+
+Heartbeat / 監視オプション（VPS 無人運用向け）:
+  --heartbeat PATH        ハートビート JSON の出力パス（進捗・PID・ステータス）
+                          外部監視（cron, systemd 等）からファイルの mtime や
+                          status フィールドでプロセスの生死と進捗を確認できる
+  --heartbeat-interval SEC
+                          ハートビート書き込み間隔（秒、デフォルト: 10）
 """
 
 # test-run command help message in Japanese
@@ -557,6 +564,26 @@ def build_run_parser(p: argparse.ArgumentParser) -> argparse.ArgumentParser:
         help="Comma-separated list of output field names to profile (default: all non-meta fields)",
     )
 
+    # Heartbeat / monitoring options (VPS unattended operation)
+    p.add_argument(
+        "--heartbeat",
+        type=str,
+        default=None,
+        metavar="PATH",
+        help=(
+            "Write heartbeat JSON to PATH (progress, PID, status). "
+            "Useful for remote monitoring on VPS. "
+            "The file is atomically updated every --heartbeat-interval seconds."
+        ),
+    )
+    p.add_argument(
+        "--heartbeat-interval",
+        type=float,
+        default=10.0,
+        metavar="SEC",
+        help="Heartbeat write interval in seconds (default: 10)",
+    )
+
     # Optimization options
     p.add_argument(
         "--use-shared-transport",
@@ -864,6 +891,8 @@ def _build_run_config(args) -> "RunConfig":
             if getattr(args, "character", None)
             else None
         ),
+        heartbeat_path=getattr(args, "heartbeat", None),
+        heartbeat_interval=getattr(args, "heartbeat_interval", 10.0),
     )
 
 

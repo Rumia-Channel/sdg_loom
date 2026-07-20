@@ -165,6 +165,11 @@ class RunConfig(BaseModel):
     verbose: bool = False
     # キャラクターカード (--character) のパス。指定時は YAML の character: キーより優先される。
     character_path: Optional[str] = None
+    # Heartbeat ファイル (VPS 無人運用向け)。
+    # 進捗・PID・ステータスを JSON でアトミック書き出しし、
+    # 外部監視（cron, systemd, Zabbix 等）から生死と進捗を確認できる。
+    heartbeat_path: Optional[str] = None
+    heartbeat_interval: float = 10.0
 
     def apply_provider_defaults(self, provider) -> None:
         """ConcurrencyConfig の None フィールドに Provider 既定値を適用する。

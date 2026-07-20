@@ -37,6 +37,7 @@ from ..scheduler.base import SchedulerConfig
 from ..scheduler.fixed import FixedScheduler
 from .result import RunReport
 from .run_config import RunConfig
+from .shutdown import HeartbeatWriter, ShutdownManager
 
 
 class PipelineEngine:
@@ -382,12 +383,12 @@ class PipelineEngine:
         append_mode: bool,
         total_count: Optional[int],
         profiler: Optional[ProfileCollector],
-    ) -> tuple[int, int]:
+    ) -> tuple[int, int, bool]:
         """
         統合 write loop - 全 3 runners の重複を解消。
 
         Returns:
-            (completed, errors) のタプル
+            (completed, errors, interrupted) のタプル
         """
         completed = 0
         errors = 0
@@ -399,6 +400,16 @@ class PipelineEngine:
 
         logger = get_logger()
         progress = logger.create_progress() if rc.show_progress else None
+
+        # Graceful shutdown & heartbeat (VPS 無人運用向け)
+        shutdown = ShutdownManager()
+        heartbeat: Optional[HeartbeatWriter] = None
+        if rc.heartbeat_path:
+            heartbeat = HeartbeatWriter(
+                rc.heartbeat_path,
+                total_rows=total_count,
+                interval=rc.heartbeat_interval,
+            )
 
         # クライアントと Python 関数をプリロード
         clients = _build_clients(self._cfg)
@@ -416,95 +427,118 @@ class PipelineEngine:
         # エラー出力はメイン出力の拡張子 .jsonl を .error.jsonl に置換したパスに書き出す
         error_output_path = str(Path(output_path).with_suffix("")) + ".error.jsonl"
 
-        async with (
-            AsyncBufferedWriter(
-                output_path,
-                buffer_size=io.buffer_size,
-                flush_interval=io.flush_interval,
-                append=append_mode,
-            ) as writer,
-            AsyncBufferedWriter(
-                error_output_path,
-                buffer_size=io.buffer_size,
-                flush_interval=io.flush_interval,
-                append=append_mode,
-            ) as error_writer,
-        ):
+        shutdown.install()
+        try:
+            async with (
+                AsyncBufferedWriter(
+                    output_path,
+                    buffer_size=io.buffer_size,
+                    flush_interval=io.flush_interval,
+                    append=append_mode,
+                ) as writer,
+                AsyncBufferedWriter(
+                    error_output_path,
+                    buffer_size=io.buffer_size,
+                    flush_interval=io.flush_interval,
+                    append=append_mode,
+                ) as error_writer,
+            ):
 
-            # task_ref はプログレスコンテキスト内外で共有するリラプター
-            task_ref: list[Any] = [None]
+                # task_ref はプログレスコンテキスト内外で共有するリラプター
+                task_ref: list[Any] = [None]
 
-            async def _process_all() -> None:
-                nonlocal completed, errors, last_update
-                proc_start = time.time()
-                last_update = 0
+                async def _process_all() -> None:
+                    nonlocal completed, errors, last_update
+                    proc_start = time.time()
+                    last_update = 0
 
-                async for result in scheduler.schedule(
-                    dataset, task_factory, processed_indices
-                ):
-                    completed += 1
-                    if result.error:
-                        errors += 1
-                        logger.debug(f"Error in row {result.row_index}: {result.error}")
-                        await error_writer.write(
-                            {
-                                "_row_index": result.row_index,
-                                "_error": str(result.error),
-                                **result.data,
-                            }
-                        )
-                        if profiler:
-                            profiler.record_output(result.data, error=result.error)
-                    else:
-                        await writer.write(
-                            {
-                                "_row_index": result.row_index,
-                                **result.data,
-                            }
-                        )
-                        if profiler:
-                            profiler.record_output(result.data)
+                    async for result in scheduler.schedule(
+                        dataset, task_factory, processed_indices
+                    ):
+                        completed += 1
+                        if result.error:
+                            errors += 1
+                            logger.debug(f"Error in row {result.row_index}: {result.error}")
+                            await error_writer.write(
+                                {
+                                    "_row_index": result.row_index,
+                                    "_error": str(result.error),
+                                    **result.data,
+                                }
+                            )
+                            if profiler:
+                                profiler.record_output(result.data, error=result.error)
+                        else:
+                            await writer.write(
+                                {
+                                    "_row_index": result.row_index,
+                                    **result.data,
+                                }
+                            )
+                            if profiler:
+                                profiler.record_output(result.data)
 
-                    self._last_completed_rows = completed
-                    self._last_error_rows = errors
+                        self._last_completed_rows = completed
+                        self._last_error_rows = errors
 
-                    if progress and task_ref[0] is not None:
-                        progress.update(task_ref[0], advance=1)
-                        now = time.time()
-                        elapsed = now - proc_start
-                        if elapsed >= 1.0 and completed - last_update >= 5:
-                            last_update = completed
-                            tp = completed / elapsed * 60
-                            cc = scheduler.current_concurrency
-                            desc = f"[cyan]{completed}/{total_count or '?'} rows ({mode_label}) | 並列:{cc} 速度:{tp:.1f}行/分"
-                            progress.update(task_ref[0], description=desc)
+                        if progress and task_ref[0] is not None:
+                            progress.update(task_ref[0], advance=1)
+                            now = time.time()
+                            elapsed = now - proc_start
+                            if elapsed >= 1.0 and completed - last_update >= 5:
+                                last_update = completed
+                                tp = completed / elapsed * 60
+                                cc = scheduler.current_concurrency
+                                desc = f"[cyan]{completed}/{total_count or '?'} rows ({mode_label}) | 並列:{cc} 速度:{tp:.1f}行/分"
+                                progress.update(task_ref[0], description=desc)
 
-            if progress:
-                with progress:
-                    if total_count is not None:
-                        task_ref[0] = progress.add_task(
-                            f"[cyan]Processing {total_count} rows ({mode_label})...",
-                            total=total_count,
-                        )
-                    else:
-                        task_ref[0] = progress.add_task(
-                            f"[cyan]Processing rows ({mode_label})...",
-                            total=None,
-                        )
+                        # Heartbeat 更新 (VPS 無人運用向け)
+                        if heartbeat:
+                            heartbeat.update(
+                                completed, errors, scheduler.current_concurrency
+                            )
+
+                        # Graceful shutdown: 新規行の投入を停止し、
+                        # 完了済み行のフラッシュ後に終了する
+                        if shutdown.requested:
+                            logger.warning(
+                                f"Shutdown requested ({shutdown.reason}). "
+                                f"Flushing {completed} completed rows and stopping..."
+                            )
+                            break
+
+                if progress:
+                    with progress:
+                        if total_count is not None:
+                            task_ref[0] = progress.add_task(
+                                f"[cyan]Processing {total_count} rows ({mode_label})...",
+                                total=total_count,
+                            )
+                        else:
+                            task_ref[0] = progress.add_task(
+                                f"[cyan]Processing rows ({mode_label})...",
+                                total=None,
+                            )
+                        await _process_all()
+                else:
                     await _process_all()
-            else:
-                await _process_all()
 
-        if rc.show_progress:
-            logger.print_stats(
-                {
-                    "total": total_count if total_count is not None else completed,
-                    "completed": completed,
-                    "errors": errors,
-                }
-            )
+            if rc.show_progress:
+                logger.print_stats(
+                    {
+                        "total": total_count if total_count is not None else completed,
+                        "completed": completed,
+                        "errors": errors,
+                    }
+                )
 
-        return completed, errors
+            return completed, errors, shutdown.requested
+
+        finally:
+            shutdown.uninstall()
+            if heartbeat:
+                status = "interrupted" if shutdown.requested else "completed"
+                heartbeat.finalize(completed, errors, status)
 
     # ------------------------------------------------------------------
     # 公開 API
@@ -536,7 +570,7 @@ class PipelineEngine:
 
         start_time = time.time()
         try:
-            completed, errors = asyncio.run(
+            completed, errors, interrupted = asyncio.run(
                 self._run_async(
                     dataset,
                     output_path,
@@ -574,8 +608,18 @@ class PipelineEngine:
 
         elapsed_ms = (time.time() - start_time) * 1000
 
+        if interrupted:
+            logger = get_logger()
+            if self._run_config.show_progress:
+                logger.warning(
+                    "Interrupted by signal. Completed rows have been flushed; "
+                    "rerun with --resume to continue from the output file."
+                )
+
         self._finalize_profiler(profiler, output_path)
-        return self._build_report(total_count, completed, errors, elapsed_ms)
+        return self._build_report(
+            total_count, completed, errors, elapsed_ms, interrupted=interrupted
+        )
 
 
 __all__ = ["PipelineEngine"]

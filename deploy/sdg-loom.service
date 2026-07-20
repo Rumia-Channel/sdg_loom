@@ -1,0 +1,85 @@
+# sdg-loom.service - SDG-LOOM 大量生成パイプライン用 systemd unit
+#
+# VPS での無人運用を想定した設定:
+#   - Restart=on-failure  : クラッシュ時に自動再起動 (--resume で途中再開)
+#   - SIGTERM 対応        : sdg 側で graceful shutdown 済み (バッファフラッシュ→終了)
+#   - Heartbeat 連携      : --heartbeat で書き出した JSON を外部監視で利用可能
+#
+# 使い方:
+#   1. このファイルを /etc/systemd/system/sdg-loom.service にコピー
+#   2. 下記の ExecStart / WorkingDirectory / Environment を実環境に合わせて編集
+#   3. systemctl daemon-reload
+#   4. systemctl enable --now sdg-loom
+#
+# 確認コマンド:
+#   systemctl status sdg-loom          # サービス状態
+#   journalctl -u sdg-loom -f          # ログのリアルタイム表示
+#   cat /var/run/sdg-loom/heartbeat.json  # ハートビート確認
+#
+# 注意:
+#   - SIGTERM 受信時、sdg は完了済み行をフラッシュしてから終了する。
+#     再起動後は --resume により未処理行から自動的に再開される。
+#   - OOM kill (SIGKILL) は捕捉不可。バッファ内の最大1行分が失われるが、
+#     --resume で再処理される (LLM API コストのみ二重発生)。
+#   - StopTimeoutSec を十分に確保すること (デフォルト 90 秒)。
+#     並列数が多い場合、in-flight の LLM 応答完了に時間がかかる。
+
+[Unit]
+Description=SDG-LOOM batch synthetic data generator
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+
+# --- 実環境に合わせて編集 ---
+WorkingDirectory=/opt/sdg_loom
+ExecStart=/opt/sdg_loom/.venv/bin/sdg run \
+    --yaml pipeline.yaml \
+    --input data/input.jsonl \
+    --output output/result.jsonl \
+    --resume \
+    --adaptive --max-batch 32 \
+    --heartbeat /var/run/sdg-loom/heartbeat.json
+
+# 環境変数 (API キー等)
+Environment="DEEPSEEK_API_KEY=sk-your-key-here"
+# Environment="MINIMAX_API_KEY=sk-your-key-here"
+# Environment="SDG_PROVIDER=minimax"
+# Environment="SDG_REGION=cn"
+
+# --- 再起動ポリシー ---
+# on-failure: 非ゼロ終了コード・シグナル・タイムアウトで再起動
+# clean exit (exit 0) では再起動しない (全行処理完了)
+Restart=on-failure
+RestartSec=10
+
+# 再起動の試行上限 (5回/5分で諦めて rate-limit 防止)
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+# --- タイムアウト ---
+# SIGTERM 送信後、プロセスが自力終了するまでの猶予。
+# sdg は SIGTERM 受信後にバッファをフラッシュして終了する。
+# 並列数が多い場合は長めに設定する。
+TimeoutStopSec=120
+
+# --- セキュリティ (任意) ---
+# 最小権限で実行する場合の例。必要に応じてコメントアウトを外す。
+# User=sdg
+# Group=sdg
+# NoNewPrivileges=true
+# ProtectHome=true
+# ProtectSystem=strict
+# ReadWritePaths=/opt/sdg_loom/output /var/run/sdg-loom
+
+# --- リソース制限 (任意) ---
+# OOM 対策: メモリ上限を設定し、OOM kill 前に sdg 側で検知できるようにする
+# MemoryMax=4G
+# MemoryHigh=3G
+
+# ハートビート用ディレクトリの作成
+RuntimeDirectory=sdg-loom
+
+[Install]
+WantedBy=multi-user.target
